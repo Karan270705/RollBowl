@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RollBowl",
-    "slug": "RollBowl",
+    "slug": "rollbowl-customer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
