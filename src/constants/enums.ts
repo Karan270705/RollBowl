@@ -35,11 +35,11 @@ export enum SubscriptionStatus {
 
 export enum MealCategory {
   BREAKFAST = 'breakfast',
-  LUNCH = 'lunch',
+  BOWL = 'bowl',
   DINNER = 'dinner',
-  SNACKS = 'snacks',
+  ROLL = 'roll',
   BEVERAGES = 'beverages',
-  COMBOS = 'combos',
+  COMBO = 'combo',
 }
 
 export enum NotificationType {

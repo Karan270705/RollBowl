@@ -20,6 +20,7 @@ interface MealRow {
   rating: number;
   total_ratings: number;
   preparation_time: number;
+  serving_size: string | null;
   nutrition: Record<string, unknown> | null;
   tags: string[];
   created_at: string;
@@ -50,6 +51,7 @@ function mapMeal(row: MealRow): Meal {
     rating: Number(row.rating),
     totalRatings: row.total_ratings,
     preparationTime: row.preparation_time,
+    servingSize: row.serving_size ?? undefined,
     nutrition: hasNutrition ? (row.nutrition as unknown as NutritionInfo) : undefined,
     tags: row.tags ?? [],
   };

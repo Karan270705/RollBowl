@@ -5,12 +5,9 @@ import { MealCategory } from '@/src/constants/enums';
 
 const CATEGORIES = [
   { key: 'all' as const, label: 'All', icon: '🍽️' },
-  { key: MealCategory.BREAKFAST, label: 'Breakfast', icon: '🥞' },
-  { key: MealCategory.LUNCH, label: 'Lunch', icon: '🍛' },
-  { key: MealCategory.DINNER, label: 'Dinner', icon: '🍲' },
-  { key: MealCategory.SNACKS, label: 'Snacks', icon: '🍟' },
-  { key: MealCategory.BEVERAGES, label: 'Drinks', icon: '☕' },
-  { key: MealCategory.COMBOS, label: 'Combos', icon: '🎁' },
+  { key: MealCategory.ROLL, label: 'Rolls', icon: '🌯' },
+  { key: MealCategory.BOWL, label: 'Bowl', icon: '🥣' },
+  { key: MealCategory.COMBO, label: 'Combos', icon: '🎁' },
 ];
 
 interface CategoryPillsProps {

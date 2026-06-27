@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
-import { SearchBar } from '@/src/components/ui';
+import { SearchBar, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { MOCK_MEALS, MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS, MOCK_INVENTORY } from '@/src/constants/mockData';
-import { getGreeting, formatCurrency, pickRandomFeatured } from '@/src/utils/formatters';
+import { useMeals } from '@/src/hooks';
+import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS, MOCK_INVENTORY } from '@/src/constants/mockData';
+import { getGreeting, pickRandomFeatured } from '@/src/utils/formatters';
+import { Button } from '@/src/components/ui';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -18,21 +20,70 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
+  // ─── Live Supabase data ────────────────────────────────────
+  const { data: meals = [], isLoading, isError, error, refetch } = useMeals();
+
   // MVP: is_featured is false for all seeded meals. Randomly pick 3 once per mount
   // so the Featured section is stable across re-renders until the app reloads.
   // Future migration: replace the line below with:
-  //   const featuredMeals = meals.filter(meal => meal.is_featured);
-  const featuredMeals = useMemo(() => pickRandomFeatured(MOCK_MEALS, 3), []);
-  const filteredMeals = MOCK_MEALS.filter((m) => {
-    const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
-    const matchesSearch = search.trim() === '' || 
-      m.name.toLowerCase().includes(search.toLowerCase()) || 
-      m.description.toLowerCase().includes(search.toLowerCase());
-    return m.isAvailable && matchesCategory && matchesSearch;
-  });
+  //   const featuredMeals = meals.filter(meal => meal.isFeatured);
+  const featuredMeals = useMemo(
+    () => pickRandomFeatured(meals, 3),
+    // Re-derive only when meals array reference changes (initial load / refetch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [meals],
+  );
+
+  const filteredMeals = useMemo(() => {
+    return meals.filter((m) => {
+      const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
+      const matchesSearch =
+        search.trim() === '' ||
+        m.name.toLowerCase().includes(search.toLowerCase()) ||
+        m.description.toLowerCase().includes(search.toLowerCase());
+      return m.isAvailable && matchesCategory && matchesSearch;
+    });
+  }, [meals, selectedCategory, search]);
 
   const unreadNotifs = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
   const availableExtras = MOCK_INVENTORY.filter((i) => i.isAvailable && i.availableQuantity > 0);
+
+  // ─── Loading state ─────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <ScreenWrapper>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+            <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+          </View>
+        </View>
+        <LoadingSpinner fullScreen message="Loading meals..." />
+      </ScreenWrapper>
+    );
+  }
+
+  // ─── Error state ───────────────────────────────────────────
+  if (isError) {
+    return (
+      <ScreenWrapper>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+            <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+          </View>
+        </View>
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Couldn't load meals"
+          subtitle={error?.message ?? 'Something went wrong. Please try again.'}
+          action={
+            <Button title="Retry" onPress={() => refetch()} variant="primary" size="sm" />
+          }
+        />
+      </ScreenWrapper>
+    );
+  }
 
   return (
     <ScreenWrapper>
@@ -86,33 +137,47 @@ export default function HomeScreen() {
       )}
 
       {/* Featured */}
-      <Section title="Featured Today" actionLabel="See all">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {featuredMeals.map((meal) => (
-            <MealCard
-              key={meal.id}
-              meal={meal}
-              compact
-              onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-              onAddToCart={() => addItem(meal, 1)}
-            />
-          ))}
-        </ScrollView>
-      </Section>
+      {featuredMeals.length > 0 && (
+        <Section title="Featured Today" actionLabel="See all">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {featuredMeals.map((meal) => (
+              <MealCard
+                key={meal.id}
+                meal={meal}
+                compact
+                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+                onAddToCart={() => addItem(meal, 1)}
+              />
+            ))}
+          </ScrollView>
+        </Section>
+      )}
 
       {/* Categories */}
       <CategoryPills selected={selectedCategory} onSelect={setSelectedCategory} />
 
       {/* Meals Grid */}
       <Section title="Today's Menu">
-        {filteredMeals.map((meal) => (
-          <MealCard
-            key={meal.id}
-            meal={meal}
-            onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-            onAddToCart={() => addItem(meal, 1)}
+        {filteredMeals.length === 0 ? (
+          <EmptyState
+            icon="restaurant-outline"
+            title="No meals found"
+            subtitle={
+              search.trim()
+                ? `No results for "${search}". Try a different search.`
+                : 'No meals available in this category right now.'
+            }
           />
-        ))}
+        ) : (
+          filteredMeals.map((meal) => (
+            <MealCard
+              key={meal.id}
+              meal={meal}
+              onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+              onAddToCart={() => addItem(meal, 1)}
+            />
+          ))
+        )}
       </Section>
     </ScreenWrapper>
   );

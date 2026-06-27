@@ -22,7 +22,10 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
         <Image source={{ uri: meal.imageUrl }} style={styles.compactImage} />
         <View style={styles.compactInfo}>
           <Text style={styles.compactName} numberOfLines={1}>{meal.name}</Text>
-          <Text style={styles.compactPrice}>{formatCurrency(meal.price)}</Text>
+          <View style={styles.compactPriceRow}>
+            <Text style={styles.compactPrice}>{formatCurrency(meal.price)}</Text>
+            {meal.servingSize && <Text style={styles.compactServing}>{meal.servingSize}</Text>}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -48,6 +51,7 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
             {meal.originalPrice && (
               <Text style={styles.originalPrice}>{formatCurrency(meal.originalPrice)}</Text>
             )}
+            {meal.servingSize && <Text style={styles.servingSize}> • {meal.servingSize}</Text>}
           </View>
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={14} color={Colors.warning} />
@@ -101,5 +105,8 @@ const styles = StyleSheet.create({
   compactImage: { width: '100%', height: 100, backgroundColor: Colors.surfaceElevated },
   compactInfo: { padding: Spacing.sm },
   compactName: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
-  compactPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.primary, marginTop: 2 },
+  compactPriceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  compactPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.primary },
+  compactServing: { fontSize: Typography.size.xs, color: Colors.textSecondary },
+  servingSize: { fontSize: Typography.size.sm, color: Colors.textSecondary, fontFamily: Typography.family.medium },
 });

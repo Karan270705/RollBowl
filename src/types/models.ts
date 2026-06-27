@@ -101,6 +101,7 @@ export interface Meal {
   rating: number;
   totalRatings: number;
   preparationTime: number; // minutes
+  servingSize?: string;
   nutrition?: NutritionInfo;
   tags: string[];
 }

@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'rea
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
-import { Button } from '@/src/components/ui';
+import { Button, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
-import { MOCK_MEALS } from '@/src/constants/mockData';
+import { useMeal } from '@/src/hooks';
 import { useCartStore } from '@/src/store';
 import { formatCurrency } from '@/src/utils/formatters';
 import { MealType } from '@/src/constants/enums';
@@ -13,11 +13,47 @@ import { MealType } from '@/src/constants/enums';
 export default function MealDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const meal = MOCK_MEALS.find((m) => m.id === id);
+  const { data: meal, isLoading, isError, error } = useMeal(id);
   const addItem = useCartStore((s) => s.addItem);
   const [qty, setQty] = React.useState(1);
 
-  if (!meal) return <View style={styles.center}><Text>Meal not found</Text></View>;
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <LoadingSpinner fullScreen message="Loading meal..." />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Couldn't load meal"
+          subtitle={error?.message ?? 'Something went wrong.'}
+          action={<Button title="Go Back" onPress={() => router.back()} variant="primary" size="sm" />}
+        />
+      </View>
+    );
+  }
+
+  if (!meal) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <EmptyState icon="restaurant-outline" title="Meal not found" subtitle="This meal may no longer be available." />
+      </View>
+    );
+  }
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : Colors.error;
 
@@ -46,6 +82,12 @@ export default function MealDetailScreen() {
               <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.metaText}>{meal.preparationTime} min</Text>
             </View>
+            {meal.servingSize && (
+              <View style={styles.metaItem}>
+                <Ionicons name="restaurant-outline" size={16} color={Colors.textSecondary} />
+                <Text style={styles.metaText}>{meal.servingSize}</Text>
+              </View>
+            )}
           </View>
 
           {meal.tags.length > 0 && (
