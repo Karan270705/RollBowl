@@ -90,6 +90,14 @@ export default function MealDetailScreen() {
             )}
           </View>
 
+          {/* Unavailable banner */}
+          {!meal.isAvailable && (
+            <View style={styles.unavailableBanner}>
+              <Ionicons name="time-outline" size={18} color={Colors.error} />
+              <Text style={styles.unavailableBannerText}>Not available today</Text>
+            </View>
+          )}
+
           {meal.tags.length > 0 && (
             <View style={styles.tags}>
               {meal.tags.map((tag) => (
@@ -120,18 +128,25 @@ export default function MealDetailScreen() {
       </ScrollView>
 
       {/* Bottom Bar */}
-      <View style={styles.bottomBar}>
-        <View>
-          <Text style={styles.price}>{formatCurrency(meal.price * qty)}</Text>
-          {meal.originalPrice && <Text style={styles.originalPrice}>{formatCurrency(meal.originalPrice * qty)}</Text>}
+      {meal.isAvailable ? (
+        <View style={styles.bottomBar}>
+          <View>
+            <Text style={styles.price}>{formatCurrency(meal.price * qty)}</Text>
+            {meal.originalPrice && <Text style={styles.originalPrice}>{formatCurrency(meal.originalPrice * qty)}</Text>}
+          </View>
+          <QuantitySelector quantity={qty} onIncrement={() => setQty(qty + 1)} onDecrement={() => setQty(Math.max(1, qty - 1))} min={1} />
+          <Button
+            title="Add to Cart"
+            onPress={() => { addItem(meal, qty); router.back(); }}
+            leftIcon={<Ionicons name="cart-outline" size={18} color={Colors.white} />}
+          />
         </View>
-        <QuantitySelector quantity={qty} onIncrement={() => setQty(qty + 1)} onDecrement={() => setQty(Math.max(1, qty - 1))} min={1} />
-        <Button
-          title="Add to Cart"
-          onPress={() => { addItem(meal, qty); router.back(); }}
-          leftIcon={<Ionicons name="cart-outline" size={18} color={Colors.white} />}
-        />
-      </View>
+      ) : (
+        <View style={styles.bottomBarDisabled}>
+          <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
+          <Text style={styles.disabledText}>This item is not available today</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -172,4 +187,20 @@ const styles = StyleSheet.create({
   },
   price: { fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   originalPrice: { fontSize: Typography.size.sm, color: Colors.textTertiary, textDecorationLine: 'line-through' },
+  unavailableBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.errorLight, borderRadius: Radii.md,
+    padding: Spacing.md, marginTop: Spacing.base,
+  },
+  unavailableBannerText: {
+    fontSize: Typography.size.sm, fontFamily: Typography.family.semiBold, color: Colors.error,
+  },
+  bottomBarDisabled: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    padding: Spacing.base, paddingBottom: Spacing['2xl'],
+    backgroundColor: Colors.surfaceElevated, borderTopWidth: 1, borderTopColor: Colors.borderLight,
+  },
+  disabledText: {
+    fontSize: Typography.size.base, fontFamily: Typography.family.medium, color: Colors.textTertiary,
+  },
 });

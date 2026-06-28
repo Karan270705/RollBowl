@@ -9,7 +9,6 @@ export { signIn as login, signUp as signup } from '../auth';
 export {
   mockFetchMeals as fetchMeals,
   mockFetchMealById as fetchMealById,
-  mockFetchFeaturedMeals as fetchFeaturedMeals,
   mockFetchOrders as fetchOrders,
   mockFetchOrderById as fetchOrderById,
   mockFetchSubscription as fetchSubscription,

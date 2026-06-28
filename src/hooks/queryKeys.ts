@@ -10,6 +10,12 @@ export const queryKeys = {
     list: (category?: string) =>
       ['meals', 'list', category ?? 'all'] as const,
     detail: (id: string) => ['meals', 'detail', id] as const,
-    featured: ['meals', 'featured'] as const,
+    catalog: (category?: string) =>
+      ['meals', 'catalog', category ?? 'all'] as const,
+  },
+  orders: {
+    all: ['orders'] as const,
+    list: (userId: string) => ['orders', 'list', userId] as const,
+    detail: (id: string) => ['orders', 'detail', id] as const,
   },
 } as const;

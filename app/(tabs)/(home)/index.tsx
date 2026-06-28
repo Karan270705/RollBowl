@@ -8,9 +8,9 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useMeals } from '@/src/hooks';
-import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS, MOCK_INVENTORY } from '@/src/constants/mockData';
-import { getGreeting, pickRandomFeatured } from '@/src/utils/formatters';
+import { useMeals, useAllMeals } from '@/src/hooks';
+import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS } from '@/src/constants/mockData';
+import { getGreeting } from '@/src/utils/formatters';
 import { Button } from '@/src/components/ui';
 
 export default function HomeScreen() {
@@ -20,33 +20,25 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ─── Live Supabase data ────────────────────────────────────
-  const { data: meals = [], isLoading, isError, error, refetch } = useMeals();
+  // ─── Today's Menu: only available meals ────────────────────
+  const { data: availableMeals = [], isLoading, isError, error, refetch } = useMeals();
 
-  // MVP: is_featured is false for all seeded meals. Randomly pick 3 once per mount
-  // so the Featured section is stable across re-renders until the app reloads.
-  // Future migration: replace the line below with:
-  //   const featuredMeals = meals.filter(meal => meal.isFeatured);
-  const featuredMeals = useMemo(
-    () => pickRandomFeatured(meals, 3),
-    // Re-derive only when meals array reference changes (initial load / refetch).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [meals],
-  );
+  // ─── Browse Catalog: full catalog (available + unavailable) ─
+  const { data: allMeals = [] } = useAllMeals();
 
-  const filteredMeals = useMemo(() => {
-    return meals.filter((m) => {
+  // Filter the catalog by category and search
+  const filteredCatalog = useMemo(() => {
+    return allMeals.filter((m) => {
       const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
       const matchesSearch =
         search.trim() === '' ||
         m.name.toLowerCase().includes(search.toLowerCase()) ||
         m.description.toLowerCase().includes(search.toLowerCase());
-      return m.isAvailable && matchesCategory && matchesSearch;
+      return matchesCategory && matchesSearch;
     });
-  }, [meals, selectedCategory, search]);
+  }, [allMeals, selectedCategory, search]);
 
   const unreadNotifs = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
-  const availableExtras = MOCK_INVENTORY.filter((i) => i.isAvailable && i.availableQuantity > 0);
 
   // ─── Loading state ─────────────────────────────────────────
   if (isLoading) {
@@ -99,9 +91,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
-      <SearchBar value={search} onChangeText={setSearch} placeholder="Search meals, stalls..." />
-
       {/* Subscription Banner */}
       <TouchableOpacity
         style={styles.subBanner}
@@ -118,33 +107,16 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.8)" />
         </LinearGradient>
       </TouchableOpacity>
-      {/* Extra Meals Available */}
-      {availableExtras.length > 0 && (
-        <TouchableOpacity
-          style={styles.extraBanner}
-          onPress={() => router.push('/(tabs)/(home)/availability' as any)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.extraIcon}>
-            <Ionicons name="flash" size={18} color={Colors.secondary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.extraTitle}>{availableExtras.length} Extra Meals Available</Text>
-            <Text style={styles.extraSubtitle}>Reserve before they're gone</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
-        </TouchableOpacity>
-      )}
 
-      {/* Featured */}
-      {featuredMeals.length > 0 && (
-        <Section title="Featured Today" actionLabel="See all">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {featuredMeals.map((meal) => (
+      {/* ─── Section 1: Today's Menu (horizontal scroll, available only) ─── */}
+      {availableMeals.length > 0 && (
+        <Section title={`Today's Menu  (${availableMeals.length})`}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
+            {availableMeals.map((meal) => (
               <MealCard
                 key={meal.id}
                 meal={meal}
-                compact
+                prominent
                 onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
                 onAddToCart={() => addItem(meal, 1)}
               />
@@ -153,28 +125,32 @@ export default function HomeScreen() {
         </Section>
       )}
 
-      {/* Categories */}
+      {/* ─── Section 2: Browse Catalog (full grid with filters) ─── */}
+      {/* Search */}
+      <SearchBar value={search} onChangeText={setSearch} placeholder="Search the catalog..." />
+
+      {/* Category filters */}
       <CategoryPills selected={selectedCategory} onSelect={setSelectedCategory} />
 
-      {/* Meals Grid */}
-      <Section title="Today's Menu">
-        {filteredMeals.length === 0 ? (
+      {/* Catalog Grid */}
+      <Section title="Browse Catalog">
+        {filteredCatalog.length === 0 ? (
           <EmptyState
             icon="restaurant-outline"
             title="No meals found"
             subtitle={
               search.trim()
                 ? `No results for "${search}". Try a different search.`
-                : 'No meals available in this category right now.'
+                : 'No meals in this category.'
             }
           />
         ) : (
-          filteredMeals.map((meal) => (
+          filteredCatalog.map((meal) => (
             <MealCard
               key={meal.id}
               meal={meal}
               onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-              onAddToCart={() => addItem(meal, 1)}
+              onAddToCart={meal.isAvailable ? () => addItem(meal, 1) : undefined}
             />
           ))
         )}
@@ -203,15 +179,4 @@ const styles = StyleSheet.create({
   subInfo: { flex: 1 },
   subTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.white },
   subDetail: { fontSize: Typography.size.sm, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  extraBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Colors.secondaryLight, borderRadius: Radii.lg,
-    padding: Spacing.base, marginBottom: Spacing.sm,
-  },
-  extraIcon: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
-  },
-  extraTitle: { fontSize: Typography.size.sm, fontFamily: Typography.family.semiBold, color: Colors.textPrimary },
-  extraSubtitle: { fontSize: Typography.size.xs, color: Colors.textSecondary, marginTop: 1 },
 });

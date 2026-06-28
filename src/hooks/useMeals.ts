@@ -3,7 +3,7 @@ import { queryKeys } from './queryKeys';
 import {
   fetchMeals,
   fetchMealById,
-  fetchFeaturedMeals,
+  fetchAllMeals,
 } from '@/src/services/meals';
 import { MealCategory } from '@/src/constants/enums';
 
@@ -34,15 +34,12 @@ export function useMeal(id: string | undefined) {
 }
 
 /**
- * Fetch meals where is_featured = true.
- *
- * MVP note: all seeded meals have is_featured=false, so this returns [].
- * The Home screen uses pickRandomFeatured() as a temporary stand-in.
- * Future: once business sets is_featured=true, this hook returns the real set.
+ * Fetch the full catalog (available + unavailable), optionally filtered by category.
+ * Used by the "Browse Catalog" section on the Home screen.
  */
-export function useFeaturedMeals() {
+export function useAllMeals(category?: MealCategory) {
   return useQuery({
-    queryKey: queryKeys.meals.featured,
-    queryFn: fetchFeaturedMeals,
+    queryKey: queryKeys.meals.catalog(category),
+    queryFn: () => fetchAllMeals(category),
   });
 }

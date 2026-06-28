@@ -23,7 +23,6 @@ export const AppConfig = {
 
   // Feature Flags
   FEATURES: {
-    DELIVERY_ENABLED: true,
     SUBSCRIPTION_ENABLED: true,
     NOTIFICATIONS_ENABLED: true,
     SOCIAL_LOGIN_ENABLED: false,

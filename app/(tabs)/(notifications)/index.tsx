@@ -10,8 +10,7 @@ import { formatRelativeTime } from '@/src/utils/formatters';
 
 const ICON_MAP: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
   [NotificationType.ORDER_UPDATE]: 'receipt-outline',
-  [NotificationType.DELIVERY_UPDATE]: 'bicycle-outline',
-  [NotificationType.PROMOTION]: 'pricetag-outline',
+  [NotificationType.PROMOTION]: 'gift-outline',
   [NotificationType.SUBSCRIPTION]: 'card-outline',
   [NotificationType.SYSTEM]: 'information-circle-outline',
 };
@@ -23,7 +22,7 @@ export default function NotificationsScreen() {
   const [readIds, setReadIds] = useState<string[]>([]);
 
   const filtered = tab === 'All' ? MOCK_NOTIFICATIONS
-    : tab === 'Orders' ? MOCK_NOTIFICATIONS.filter(n => n.type === NotificationType.ORDER_UPDATE || n.type === NotificationType.DELIVERY_UPDATE)
+    : tab === 'Orders' ? MOCK_NOTIFICATIONS.filter(n => n.type === NotificationType.ORDER_UPDATE)
     : MOCK_NOTIFICATIONS.filter(n => n.type === NotificationType.PROMOTION);
 
   return (

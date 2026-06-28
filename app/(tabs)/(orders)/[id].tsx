@@ -1,18 +1,27 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
-import { Button, StatusBadge } from '@/src/components/ui';
-import { MOCK_ORDERS } from '@/src/constants/mockData';
+import { Button, LoadingSpinner, StatusBadge } from '@/src/components/ui';
+import { OrderStatus } from '@/src/constants/enums';
+import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
+import { useOrder } from '@/src/hooks';
 import { formatCurrency, formatRelativeTime } from '@/src/utils/formatters';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  
-  const order = MOCK_ORDERS.find(o => o.id === id);
+
+  const { data: order, isLoading } = useOrder(id);
+
+  if (isLoading) {
+    return (
+      <ScreenWrapper>
+        <LoadingSpinner fullScreen message="Loading order details..." />
+      </ScreenWrapper>
+    );
+  }
 
   if (!order) {
     return (
@@ -39,21 +48,23 @@ export default function OrderDetailsScreen() {
           <StatusBadge status={order.status} />
         </View>
 
-        {/* Tracking Action */}
-        <View style={styles.trackCard}>
-          <View style={styles.trackInfo}>
-            <Ionicons name="location" size={24} color={Colors.primary} />
-            <View style={styles.trackTextContainer}>
-              <Text style={styles.trackTitle}>Track your order</Text>
-              <Text style={styles.trackSubtitle}>See real-time status updates</Text>
+        {/* Tracking Action (Only for active orders) */}
+        {order.status !== OrderStatus.PICKED_UP && order.status !== OrderStatus.CANCELLED && (
+          <View style={styles.trackCard}>
+            <View style={styles.trackInfo}>
+              <Ionicons name="location" size={24} color={Colors.primary} />
+              <View style={styles.trackTextContainer}>
+                <Text style={styles.trackTitle}>Track your order</Text>
+                <Text style={styles.trackSubtitle}>See real-time status updates</Text>
+              </View>
             </View>
+            <Button
+              title="Track"
+              onPress={() => router.push(`/(tabs)/(orders)/track/${order.id}` as any)}
+              size="sm"
+            />
           </View>
-          <Button 
-            title="Track" 
-            onPress={() => router.push(`/(tabs)/(orders)/track/${order.id}` as any)} 
-            size="sm" 
-          />
-        </View>
+        )}
 
         {/* Stall Info */}
         <Section title="Stall Details">
@@ -67,8 +78,8 @@ export default function OrderDetailsScreen() {
         <Section title="Order Items">
           <View style={styles.itemsCard}>
             {order.items.map((item, index) => (
-              <View 
-                key={item.id} 
+              <View
+                key={item.id}
                 style={[
                   styles.itemRow,
                   index < order.items.length - 1 && styles.borderBottom
@@ -79,11 +90,7 @@ export default function OrderDetailsScreen() {
                 </View>
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.mealName}</Text>
-                  {item.addOns && item.addOns.length > 0 && (
-                    <Text style={styles.itemAddons}>
-                      +{item.addOns.map(a => a.name).join(', ')}
-                    </Text>
-                  )}
+                  {/* Add-ons unsupported in current DB schema for order items, omitting */}
                 </View>
                 <Text style={styles.itemPrice}>{formatCurrency(item.price * item.quantity)}</Text>
               </View>
@@ -96,11 +103,11 @@ export default function OrderDetailsScreen() {
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(order.total - 2.5)}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Taxes & Fees</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(2.5)}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total</Text>
@@ -133,7 +140,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   scrollContent: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xl,
   },
   header: {
     flexDirection: 'row',
@@ -142,7 +149,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   orderNumber: {
-    fontSize: Typography.size.xxl,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
   },

@@ -1,6 +1,7 @@
 import { supabase } from '@/src/lib/supabase';
 import { LoginRequest, SignupRequest } from '@/src/types/api';
 import { User } from '@/src/types/models';
+import * as Linking from 'expo-linking';
 
 export const signIn = async ({ email, password }: LoginRequest) => {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -32,9 +33,20 @@ export const signOut = async () => {
 };
 
 export const resetPassword = async (email: string) => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  const redirectUrl = Linking.createURL('reset-password');
+  console.log('\n--- RESET PASSWORD AUDIT ---');
+  console.log('1. EXACT REDIRECT URL SENT:', redirectUrl);
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: redirectUrl,
+  });
+
+  console.log('2. SUPABASE ERROR RETURNED:', error ? error.message : 'None (Success)');
+  console.log('----------------------------\n');
+
   if (error) throw error;
 };
+
 
 export const fetchUserProfile = async (userId: string): Promise<User | null> => {
   const { data, error } = await supabase
@@ -42,10 +54,10 @@ export const fetchUserProfile = async (userId: string): Promise<User | null> => 
     .select('*')
     .eq('id', userId)
     .maybeSingle();
-    
+
   if (error) throw error;
   if (!data) return null;
-  
+
   // Map Supabase snake_case columns to camelCase User model
   return {
     id: data.id,

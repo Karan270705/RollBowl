@@ -15,7 +15,6 @@ export enum OrderStatus {
   PREPARING = 'preparing',
   READY = 'ready',
   PICKED_UP = 'picked_up',
-  DELIVERED = 'delivered',
   CANCELLED = 'cancelled',
 }
 
@@ -44,7 +43,6 @@ export enum MealCategory {
 
 export enum NotificationType {
   ORDER_UPDATE = 'order_update',
-  DELIVERY_UPDATE = 'delivery_update',
   PROMOTION = 'promotion',
   SUBSCRIPTION = 'subscription',
   SYSTEM = 'system',
@@ -68,7 +66,6 @@ export const OrderStatusLabels: Record<OrderStatus, string> = {
   [OrderStatus.PREPARING]: 'Preparing',
   [OrderStatus.READY]: 'Ready',
   [OrderStatus.PICKED_UP]: 'Picked Up',
-  [OrderStatus.DELIVERED]: 'Delivered',
   [OrderStatus.CANCELLED]: 'Cancelled',
 };
 
@@ -78,6 +75,5 @@ export const OrderStatusColors: Record<OrderStatus, string> = {
   [OrderStatus.PREPARING]: '#E87A1E',   // Brand orange
   [OrderStatus.READY]: '#2E7D32',       // Brand green
   [OrderStatus.PICKED_UP]: '#7B1FA2',   // Purple (distinct)
-  [OrderStatus.DELIVERED]: '#2E7D32',   // Brand green
   [OrderStatus.CANCELLED]: '#C41E24',   // Brand red
 };

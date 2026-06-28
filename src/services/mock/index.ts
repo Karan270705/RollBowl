@@ -30,11 +30,6 @@ export const mockFetchMealById = async (id: string): Promise<ApiResponse<Meal>> 
   return { success: true, data: meal };
 };
 
-export const mockFetchFeaturedMeals = async (): Promise<ApiResponse<Meal[]>> => {
-  await mockDelay();
-  return { success: true, data: MOCK_MEALS.filter(m => m.isFeatured) };
-};
-
 // ─── Orders ──────────────────────────────────────────────
 export const mockFetchOrders = async (userId?: string): Promise<ApiResponse<Order[]>> => {
   await mockDelay();

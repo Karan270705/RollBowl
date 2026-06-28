@@ -5,22 +5,42 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
-import { useCartStore } from '@/src/store';
+import { useCartStore, useUser } from '@/src/store';
 import { formatCurrency } from '@/src/utils/formatters';
-import { MOCK_ADDRESSES } from '@/src/constants/mockData';
+import { placeOrder } from '@/src/services/orders';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/src/hooks/queryKeys';
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { items, getSubtotal, clearCart } = useCartStore();
-  const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup');
   const [payment, setPayment] = useState('upi');
+  const user = useUser();
+  const [isPlacing, setIsPlacing] = useState(false);
   const subtotal = getSubtotal();
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
 
-  const handlePlaceOrder = () => {
-    clearCart();
-    router.replace('/(tabs)/(orders)/confirmation' as any);
+  const handlePlaceOrder = async () => {
+    if (!user || items.length === 0) return;
+    try {
+      setIsPlacing(true);
+      const stallId = items[0].meal.stallId;
+      const stallName = 'RollBowl Main Stall'; // Typically fetched or associated with items
+      await placeOrder(user.id, user.name, stallId, stallName, items, subtotal, tax, total);
+      
+      // Invalidate the orders cache so the new order shows up immediately
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
+      
+      clearCart();
+      router.replace('/(tabs)/(orders)/confirmation' as any);
+    } catch (error) {
+      console.error('Failed to place order:', error);
+      alert('Failed to place order. Please try again.');
+    } finally {
+      setIsPlacing(false);
+    }
   };
 
   return (
@@ -31,22 +51,24 @@ export default function CheckoutScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Mode Toggle */}
-      <View style={styles.modeRow}>
-        {(['pickup', 'delivery'] as const).map((m) => (
-          <TouchableOpacity key={m} style={[styles.modeBtn, mode === m && styles.modeActive]} onPress={() => setMode(m)}>
-            <Ionicons name={m === 'pickup' ? 'walk-outline' : 'bicycle-outline'} size={18} color={mode === m ? Colors.white : Colors.textSecondary} />
-            <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m === 'pickup' ? 'Pickup' : 'Delivery'}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {mode === 'delivery' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Delivery Address</Text>
-          <Text style={styles.cardValue}>{MOCK_ADDRESSES[0].fullAddress}</Text>
+      {/* Pickup Information */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Pickup Information</Text>
+        <View style={styles.pickupRow}>
+          <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} />
+          <View>
+            <Text style={styles.pickupLabel}>Pickup Location</Text>
+            <Text style={styles.cardValue}>RollBowl Main Stall</Text>
+          </View>
         </View>
-      )}
+        <View style={[styles.pickupRow, { marginTop: Spacing.sm }]}>
+          <Ionicons name="time-outline" size={20} color={Colors.textSecondary} />
+          <View>
+            <Text style={styles.pickupLabel}>Pickup Time</Text>
+            <Text style={styles.cardValue}>Ready in approx. 15 minutes</Text>
+          </View>
+        </View>
+      </View>
 
       {/* Order Items */}
       <View style={styles.card}>
@@ -80,7 +102,14 @@ export default function CheckoutScreen() {
         </View>
       </View>
 
-      <Button title={`Place Order • ${formatCurrency(total)}`} onPress={handlePlaceOrder} fullWidth size="lg" />
+      <Button 
+        title={`Place Order • ${formatCurrency(total)}`} 
+        onPress={handlePlaceOrder} 
+        fullWidth 
+        size="lg" 
+        loading={isPlacing} 
+        disabled={isPlacing || items.length === 0} 
+      />
     </ScreenWrapper>
   );
 }
@@ -88,14 +117,11 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing.xl, marginBottom: Spacing.base },
   title: { fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary },
-  modeRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.base },
-  modeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: Spacing.md, borderRadius: Radii.md, backgroundColor: Colors.surfaceElevated },
-  modeActive: { backgroundColor: Colors.primary },
-  modeText: { fontSize: Typography.size.sm, fontFamily: Typography.family.semiBold, color: Colors.textSecondary },
-  modeTextActive: { color: Colors.white },
   card: { backgroundColor: Colors.surface, borderRadius: Radii.lg, padding: Spacing.base, marginBottom: Spacing.md, ...Shadows.sm },
   cardTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.semiBold, color: Colors.textPrimary, marginBottom: Spacing.sm },
-  cardValue: { fontSize: Typography.size.sm, color: Colors.textSecondary },
+  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  pickupLabel: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginBottom: 2 },
+  cardValue: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
   itemText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
   itemPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },

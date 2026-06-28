@@ -11,19 +11,49 @@ interface MealCardProps {
   onPress: () => void;
   onAddToCart?: () => void;
   compact?: boolean;
+  prominent?: boolean;
 }
 
-export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact }) => {
+export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent }) => {
   const typeColor = meal.type === MealType.VEG ? Colors.success : meal.type === MealType.VEGAN ? Colors.success : Colors.error;
+  const unavailable = !meal.isAvailable;
+
+  // ─── Prominent variant (Today's Menu hero cards) ─────────
+  if (prominent) {
+    return (
+      <TouchableOpacity style={styles.prominentCard} onPress={onPress} activeOpacity={0.8}>
+        <Image source={{ uri: meal.imageUrl }} style={styles.prominentImage} />
+        <View style={styles.prominentInfo}>
+          <View style={styles.row}>
+            <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
+            <Text style={styles.prominentName} numberOfLines={1}>{meal.name}</Text>
+          </View>
+          <Text style={styles.prominentDesc} numberOfLines={2}>{meal.description}</Text>
+          <View style={styles.prominentFooter}>
+            <View>
+              <Text style={styles.prominentPrice}>{formatCurrency(meal.price)}</Text>
+              {meal.servingSize && <Text style={styles.prominentServing}>{meal.servingSize}</Text>}
+            </View>
+            {onAddToCart && (
+              <TouchableOpacity style={styles.prominentAddBtn} onPress={onAddToCart} activeOpacity={0.7}>
+                <Ionicons name="add" size={18} color={Colors.white} />
+                <Text style={styles.prominentAddText}>Add</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   if (compact) {
     return (
       <TouchableOpacity style={styles.compactCard} onPress={onPress} activeOpacity={0.7}>
-        <Image source={{ uri: meal.imageUrl }} style={styles.compactImage} />
+        <Image source={{ uri: meal.imageUrl }} style={[styles.compactImage, unavailable && styles.unavailableImage]} />
         <View style={styles.compactInfo}>
-          <Text style={styles.compactName} numberOfLines={1}>{meal.name}</Text>
+          <Text style={[styles.compactName, unavailable && styles.unavailableText]} numberOfLines={1}>{meal.name}</Text>
           <View style={styles.compactPriceRow}>
-            <Text style={styles.compactPrice}>{formatCurrency(meal.price)}</Text>
+            <Text style={[styles.compactPrice, unavailable && styles.unavailableText]}>{formatCurrency(meal.price)}</Text>
             {meal.servingSize && <Text style={styles.compactServing}>{meal.servingSize}</Text>}
           </View>
         </View>
@@ -32,9 +62,16 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   }
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      <Image source={{ uri: meal.imageUrl }} style={styles.image} />
-      {meal.tags.length > 0 && (
+    <TouchableOpacity style={[styles.card, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
+      <Image source={{ uri: meal.imageUrl }} style={[styles.image, unavailable && styles.unavailableImage]} />
+      {/* Unavailable overlay badge */}
+      {unavailable && (
+        <View style={styles.unavailableBadge}>
+          <Text style={styles.unavailableBadgeText}>Not Available Today</Text>
+        </View>
+      )}
+      {/* Tag badge (only for available meals) */}
+      {!unavailable && meal.tags.length > 0 && (
         <View style={styles.tagContainer}>
           <Text style={styles.tag}>{meal.tags[0]}</Text>
         </View>
@@ -42,12 +79,12 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
       <View style={styles.info}>
         <View style={styles.row}>
           <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
-          <Text style={styles.name} numberOfLines={1}>{meal.name}</Text>
+          <Text style={[styles.name, unavailable && styles.unavailableText]} numberOfLines={1}>{meal.name}</Text>
         </View>
-        <Text style={styles.description} numberOfLines={2}>{meal.description}</Text>
+        <Text style={[styles.description, unavailable && styles.unavailableText]} numberOfLines={2}>{meal.description}</Text>
         <View style={styles.footer}>
           <View style={styles.priceRow}>
-            <Text style={styles.price}>{formatCurrency(meal.price)}</Text>
+            <Text style={[styles.price, unavailable && styles.unavailableText]}>{formatCurrency(meal.price)}</Text>
             {meal.originalPrice && (
               <Text style={styles.originalPrice}>{formatCurrency(meal.originalPrice)}</Text>
             )}
@@ -58,7 +95,8 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
             <Text style={styles.rating}>{meal.rating}</Text>
           </View>
         </View>
-        {onAddToCart && (
+        {/* Only show Add to Cart for available meals */}
+        {!unavailable && onAddToCart && (
           <TouchableOpacity style={styles.addButton} onPress={onAddToCart} activeOpacity={0.7}>
             <Ionicons name="add" size={20} color={Colors.white} />
           </TouchableOpacity>
@@ -73,7 +111,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface, borderRadius: Radii.lg,
     ...Shadows.md, overflow: 'hidden', marginBottom: Spacing.base,
   },
+  unavailableCard: { opacity: 0.65 },
   image: { width: '100%', height: 160, backgroundColor: Colors.surfaceElevated },
+  unavailableImage: { opacity: 0.5 },
+  unavailableBadge: {
+    position: 'absolute', top: Spacing.sm, left: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: Radii.sm,
+    paddingHorizontal: Spacing.sm, paddingVertical: 3,
+  },
+  unavailableBadgeText: {
+    fontSize: Typography.size.xs, fontFamily: Typography.family.semiBold, color: Colors.white,
+  },
+  unavailableText: { color: Colors.textTertiary },
   tagContainer: {
     position: 'absolute', top: Spacing.sm, left: Spacing.sm,
     backgroundColor: Colors.primary, borderRadius: Radii.sm,
@@ -109,4 +158,37 @@ const styles = StyleSheet.create({
   compactPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.primary },
   compactServing: { fontSize: Typography.size.xs, color: Colors.textSecondary },
   servingSize: { fontSize: Typography.size.sm, color: Colors.textSecondary, fontFamily: Typography.family.medium },
+  // Prominent variant (Today's Menu)
+  prominentCard: {
+    width: 220, backgroundColor: Colors.surface, borderRadius: Radii.lg,
+    ...Shadows.md, overflow: 'hidden', marginRight: Spacing.base,
+  },
+  prominentImage: { width: '100%', height: 150, backgroundColor: Colors.surfaceElevated },
+  prominentInfo: { padding: Spacing.md },
+  prominentName: {
+    fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+    flex: 1,
+  },
+  prominentDesc: {
+    fontSize: Typography.size.xs, color: Colors.textSecondary, lineHeight: 16,
+    marginTop: Spacing.xs,
+  },
+  prominentFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  prominentPrice: {
+    fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.primary,
+  },
+  prominentServing: {
+    fontSize: Typography.size.xs, color: Colors.textSecondary, marginTop: 1,
+  },
+  prominentAddBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.primary, borderRadius: Radii.full,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs,
+  },
+  prominentAddText: {
+    fontSize: Typography.size.xs, fontFamily: Typography.family.semiBold, color: Colors.white,
+  },
 });

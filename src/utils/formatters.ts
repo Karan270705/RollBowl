@@ -47,20 +47,3 @@ export const getGreeting = (): string => {
   if (hour < 17) return 'Good Afternoon';
   return 'Good Evening';
 };
-
-/**
- * MVP temporary helper — randomly selects `count` items from `items`
- * to display as "featured" until the business populates is_featured.
- *
- * Intended to be called inside useMemo with an empty dep array so the
- * selection runs once per component mount and remains stable across
- * re-renders. Resets naturally on app reload.
- *
- * Future migration: replace the useMemo call site in HomeScreen with:
- *   meals.filter(meal => meal.is_featured)
- */
-export function pickRandomFeatured<T>(items: T[], count = 3): T[] {
-  if (items.length <= count) return [...items];
-  const shuffled = [...items].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-}

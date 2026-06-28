@@ -61,13 +61,34 @@ function mapMeal(row: MealRow): Meal {
 
 /**
  * Fetch all available meals, optionally filtered by category.
- * RLS policy meals_read USING (true) allows any authenticated user.
+ * Used by the "Today's Menu" section.
  */
 export async function fetchMeals(category?: MealCategory): Promise<Meal[]> {
   let query = supabase
     .from('meals')
     .select('*')
     .eq('is_available', true)
+    .order('name', { ascending: true });
+
+  if (category) {
+    query = query.eq('category', category);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data as MealRow[]).map(mapMeal);
+}
+
+/**
+ * Fetch the full catalog (available + unavailable), optionally filtered by category.
+ * Used by the "Browse Catalog" section.
+ */
+export async function fetchAllMeals(category?: MealCategory): Promise<Meal[]> {
+  let query = supabase
+    .from('meals')
+    .select('*')
+    .order('is_available', { ascending: false }) // available first
     .order('name', { ascending: true });
 
   if (category) {
@@ -95,22 +116,4 @@ export async function fetchMealById(id: string): Promise<Meal> {
   if (!data) throw new Error(`Meal not found: ${id}`);
 
   return mapMeal(data as MealRow);
-}
-
-/**
- * Fetch meals where is_featured = true.
- * Returns [] when no meals are featured (MVP: all seeded meals have is_featured=false).
- * Future: business sets is_featured=true on desired meals — no code change needed here.
- */
-export async function fetchFeaturedMeals(): Promise<Meal[]> {
-  const { data, error } = await supabase
-    .from('meals')
-    .select('*')
-    .eq('is_featured', true)
-    .eq('is_available', true)
-    .order('name', { ascending: true });
-
-  if (error) throw error;
-
-  return (data as MealRow[]).map(mapMeal);
 }
