@@ -145,6 +145,7 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   estimatedReadyTime?: string;
+  pickupDate: string;
 }
 
 // ─── Subscriptions ───────────────────────────────────────────

@@ -20,6 +20,7 @@ interface OrderRow {
   total: number;
   notes: string | null;
   estimated_ready_time: string | null;
+  pickup_date: string;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +67,7 @@ function mapOrder(orderRow: OrderRow, itemsRows: OrderItemRow[] = []): Order {
     total: Number(orderRow.total),
     notes: orderRow.notes ?? undefined,
     estimatedReadyTime: orderRow.estimated_ready_time ?? undefined,
+    pickupDate: orderRow.pickup_date,
     createdAt: orderRow.created_at,
     updatedAt: orderRow.updated_at,
     items: itemsRows.map(mapOrderItem),
@@ -145,6 +147,7 @@ export async function placeOrder(
   subtotal: number,
   tax: number,
   total: number,
+  pickupDate: string,
   notes?: string
 ): Promise<Order> {
   const orderNumber = `RB-${Math.floor(Math.random() * 900000) + 100000}`;
@@ -165,6 +168,7 @@ export async function placeOrder(
       discount: 0,
       total,
       notes,
+      pickup_date: pickupDate,
     })
     .select()
     .single();

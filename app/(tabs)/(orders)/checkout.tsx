@@ -10,6 +10,7 @@ import { formatCurrency } from '@/src/utils/formatters';
 import { placeOrder } from '@/src/services/orders';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
+import { useActiveMenu, useScheduledMeals } from '@/src/hooks';
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -22,13 +23,30 @@ export default function CheckoutScreen() {
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
+
   const handlePlaceOrder = async () => {
     if (!user || items.length === 0) return;
+    
+    // Cart Validation
+    const invalidItems = items.filter(cartItem => 
+      !scheduledMeals.some(meal => meal.id === cartItem.meal.id)
+    );
+
+    if (invalidItems.length > 0) {
+      alert('One or more items in your cart are no longer available on tomorrow\'s menu. Please remove them to continue.');
+      return;
+    }
+
     try {
       setIsPlacing(true);
       const stallId = items[0].meal.stallId;
       const stallName = 'RollBowl Main Stall'; // Typically fetched or associated with items
-      await placeOrder(user.id, user.name, stallId, stallName, items, subtotal, tax, total);
+      await placeOrder(user.id, user.name, stallId, stallName, items, subtotal, tax, total, tomorrowDateString, undefined);
       
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
@@ -107,8 +125,8 @@ export default function CheckoutScreen() {
         onPress={handlePlaceOrder} 
         fullWidth 
         size="lg" 
-        loading={isPlacing} 
-        disabled={isPlacing || items.length === 0} 
+        loading={isPlacing || isLoadingMenu || isLoadingMeals} 
+        disabled={isPlacing || items.length === 0 || isLoadingMenu || isLoadingMeals} 
       />
     </ScreenWrapper>
   );

@@ -12,11 +12,13 @@ interface MealCardProps {
   onAddToCart?: () => void;
   compact?: boolean;
   prominent?: boolean;
+  isOrderable?: boolean;
 }
 
-export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent }) => {
+export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable }) => {
   const typeColor = meal.type === MealType.VEG ? Colors.success : meal.type === MealType.VEGAN ? Colors.success : Colors.error;
-  const unavailable = !meal.isAvailable;
+  const unavailable = isOrderable === false ? true : !meal.isAvailable;
+  const unavailableText = isOrderable === false ? 'Not Available Tomorrow' : 'Not Available Today';
 
   // ─── Prominent variant (Today's Menu hero cards) ─────────
   if (prominent) {
@@ -67,7 +69,7 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
       {/* Unavailable overlay badge */}
       {unavailable && (
         <View style={styles.unavailableBadge}>
-          <Text style={styles.unavailableBadgeText}>Not Available Today</Text>
+          <Text style={styles.unavailableBadgeText}>{unavailableText}</Text>
         </View>
       )}
       {/* Tag badge (only for available meals) */}

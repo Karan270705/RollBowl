@@ -8,7 +8,7 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useMeals, useAllMeals } from '@/src/hooks';
+import { useAllMeals, useActiveMenu, useScheduledMeals } from '@/src/hooks';
 import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS } from '@/src/constants/mockData';
 import { getGreeting } from '@/src/utils/formatters';
 import { Button } from '@/src/components/ui';
@@ -20,8 +20,14 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ─── Today's Menu: only available meals ────────────────────
-  const { data: availableMeals = [], isLoading, isError, error, refetch } = useMeals();
+  // ─── Tomorrow's Menu: driven by menu schedules ────────────────────
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+  
+  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: availableMeals = [], isLoading: isLoadingMeals, isError, error, refetch } = useScheduledMeals(activeMenu?.id);
+  const isLoading = isLoadingMenu || isLoadingMeals;
 
   // ─── Browse Catalog: full catalog (available + unavailable) ─
   const { data: allMeals = [] } = useAllMeals();
@@ -108,9 +114,9 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* ─── Section 1: Today's Menu (horizontal scroll, available only) ─── */}
+      {/* ─── Section 1: Tomorrow's Menu (horizontal scroll, scheduled only) ─── */}
       {availableMeals.length > 0 && (
-        <Section title={`Today's Menu  (${availableMeals.length})`}>
+        <Section title={`Tomorrow's Menu  (${availableMeals.length})`}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
             {availableMeals.map((meal) => (
               <MealCard
@@ -145,14 +151,20 @@ export default function HomeScreen() {
             }
           />
         ) : (
-          filteredCatalog.map((meal) => (
-            <MealCard
-              key={meal.id}
-              meal={meal}
-              onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-              onAddToCart={meal.isAvailable ? () => addItem(meal, 1) : undefined}
-            />
-          ))
+          filteredCatalog.map((meal) => {
+            const isScheduled = availableMeals.some(m => m.id === meal.id);
+            const isOrderable = meal.isAvailable && isScheduled;
+            
+            return (
+              <MealCard
+                key={meal.id}
+                meal={meal}
+                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+                onAddToCart={isOrderable ? () => addItem(meal, 1) : undefined}
+                isOrderable={isOrderable}
+              />
+            );
+          })
         )}
       </Section>
     </ScreenWrapper>

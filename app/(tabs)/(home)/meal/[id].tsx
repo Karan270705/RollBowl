@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { Button, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
-import { useMeal } from '@/src/hooks';
+import { useMeal, useActiveMenu, useScheduledMeals } from '@/src/hooks';
 import { useCartStore } from '@/src/store';
 import { formatCurrency } from '@/src/utils/formatters';
 import { MealType } from '@/src/constants/enums';
@@ -17,7 +17,13 @@ export default function MealDetailScreen() {
   const addItem = useCartStore((s) => s.addItem);
   const [qty, setQty] = React.useState(1);
 
-  if (isLoading) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
+
+  if (isLoading || isLoadingMenu || isLoadingMeals) {
     return (
       <View style={styles.container}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -56,6 +62,8 @@ export default function MealDetailScreen() {
   }
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : Colors.error;
+  const isScheduled = availableMeals.some(m => m.id === meal.id);
+  const isOrderable = meal.isAvailable && isScheduled;
 
   return (
     <View style={styles.container}>
@@ -91,10 +99,10 @@ export default function MealDetailScreen() {
           </View>
 
           {/* Unavailable banner */}
-          {!meal.isAvailable && (
+          {!isOrderable && (
             <View style={styles.unavailableBanner}>
               <Ionicons name="time-outline" size={18} color={Colors.error} />
-              <Text style={styles.unavailableBannerText}>Not available today</Text>
+              <Text style={styles.unavailableBannerText}>Not available for tomorrow's menu</Text>
             </View>
           )}
 
@@ -128,7 +136,7 @@ export default function MealDetailScreen() {
       </ScrollView>
 
       {/* Bottom Bar */}
-      {meal.isAvailable ? (
+      {isOrderable ? (
         <View style={styles.bottomBar}>
           <View>
             <Text style={styles.price}>{formatCurrency(meal.price * qty)}</Text>
@@ -144,7 +152,7 @@ export default function MealDetailScreen() {
       ) : (
         <View style={styles.bottomBarDisabled}>
           <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
-          <Text style={styles.disabledText}>This item is not available today</Text>
+          <Text style={styles.disabledText}>This item is not available for tomorrow</Text>
         </View>
       )}
     </View>
