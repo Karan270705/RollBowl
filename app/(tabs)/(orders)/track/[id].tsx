@@ -4,55 +4,93 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
+import { LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { Timeline, TimelineStep } from '@/src/components/shared';
-import { MOCK_ORDERS } from '@/src/constants/mockData';
+import { useOrder } from '@/src/hooks';
+import { OrderStatus } from '@/src/constants/enums';
 
 export default function TrackOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  
-  const order = MOCK_ORDERS.find(o => o.id === id) || MOCK_ORDERS[0]; // fallback for mock purposes
+  const { data: order, isLoading } = useOrder(id);
+
+  if (isLoading) {
+    return (
+      <ScreenWrapper>
+        <LoadingSpinner fullScreen message="Loading tracking details..." />
+      </ScreenWrapper>
+    );
+  }
+
+  if (!order) {
+    return (
+      <ScreenWrapper>
+        <EmptyState icon="alert-circle-outline" title="Order Not Found" subtitle="Could not load tracking information." />
+      </ScreenWrapper>
+    );
+  }
 
   // Generate timeline steps based on order status
-  const getSteps = (status: string): TimelineStep[] => {
-    const isCompleted = status === 'completed';
-    const isPreparing = status === 'preparing';
-    const isPending = status === 'pending';
+  const getSteps = (status: OrderStatus): TimelineStep[] => {
+    const isPending = status === OrderStatus.PENDING;
+    const isConfirmed = status === OrderStatus.CONFIRMED;
+    const isPreparing = status === OrderStatus.PREPARING;
+    const isReady = status === OrderStatus.READY;
+    const isPickedUp = status === OrderStatus.PICKED_UP;
+    
+    // Determine active steps based on standard progression
+    const pendingActive = isPending;
+    const confirmedActive = isConfirmed;
+    const preparingActive = isPreparing;
+    const readyActive = isReady;
+    
+    // Determine completed steps
+    const confirmedCompleted = isConfirmed || isPreparing || isReady || isPickedUp;
+    const preparingCompleted = isPreparing || isReady || isPickedUp;
+    const readyCompleted = isReady || isPickedUp;
+    const pickedUpCompleted = isPickedUp;
     
     return [
       {
         id: '1',
         title: 'Order Placed',
         description: 'We have received your order.',
-        time: '10:00 AM', // Mock time
+        time: new Date(order.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         isCompleted: true,
-        isActive: false,
+        isActive: pendingActive,
         icon: 'document-text',
       },
       {
         id: '2',
         title: 'Order Confirmed',
         description: 'The kitchen has accepted your order.',
-        time: '10:02 AM',
-        isCompleted: !isPending,
-        isActive: isPending,
+        isCompleted: confirmedCompleted,
+        isActive: confirmedActive,
         icon: 'restaurant',
       },
       {
         id: '3',
         title: 'Preparing',
         description: 'Your food is being prepared with care.',
-        isCompleted: isCompleted,
-        isActive: isPreparing,
+        isCompleted: preparingCompleted,
+        isActive: preparingActive,
         icon: 'flame',
       },
       {
         id: '4',
-        title: 'Ready for Pickup / Delivered',
-        description: 'Your order is ready!',
-        isCompleted: isCompleted,
-        isActive: isCompleted,
+        title: 'Ready',
+        description: 'Your order is ready for pickup.',
+        isCompleted: readyCompleted,
+        isActive: readyActive,
         icon: 'checkmark-circle',
+      },
+      {
+        id: '5',
+        title: 'Picked Up',
+        description: 'Enjoy your meal!',
+        isCompleted: pickedUpCompleted,
+        isActive: false, // terminal state
+        icon: 'home',
       }
     ];
   };

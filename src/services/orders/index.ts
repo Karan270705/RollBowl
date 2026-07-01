@@ -34,6 +34,8 @@ interface OrderItemRow {
   unit_price: number;
   total_price: number;
   special_instructions: string | null;
+  subscription_id?: string | null;
+  credits_used?: number;
 }
 
 // ─── Mappers ──────────────────────────────────────────────────
@@ -47,6 +49,8 @@ function mapOrderItem(row: OrderItemRow): OrderItem {
     unitPrice: Number(row.unit_price),
     totalPrice: Number(row.total_price),
     specialInstructions: row.special_instructions ?? undefined,
+    subscriptionId: row.subscription_id ?? undefined,
+    creditsUsed: row.credits_used ?? undefined,
   };
 }
 
@@ -143,11 +147,12 @@ export async function placeOrder(
   customerName: string,
   stallId: string,
   stallName: string,
-  items: { meal: import('@/src/types/models').Meal; quantity: number }[],
+  items: import('@/src/utils/subscriptionEngine').ProcessedItem[],
   subtotal: number,
   tax: number,
   total: number,
   pickupDate: string,
+  subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
   notes?: string
 ): Promise<Order> {
   const orderNumber = `RB-${Math.floor(Math.random() * 900000) + 100000}`;
@@ -180,8 +185,10 @@ export async function placeOrder(
     meal_id: item.meal.id,
     meal_name: item.meal.name,
     quantity: item.quantity,
-    unit_price: item.meal.price,
-    total_price: item.meal.price * item.quantity,
+    unit_price: item.unitPrice,
+    total_price: item.totalPrice,
+    subscription_id: item.subscriptionId,
+    credits_used: item.creditsUsed,
   }));
 
   const { data: itemsData, error: itemsError } = await supabase
@@ -190,6 +197,21 @@ export async function placeOrder(
     .select();
 
   if (itemsError) throw itemsError;
+
+  // If there are subscription updates, apply them now
+  if (subscriptionUpdates) {
+    const { error: subError } = await supabase
+      .from('subscriptions')
+      .update({
+        last_usage_date: subscriptionUpdates.updates.lastUsageDate,
+        daily_credits_used: subscriptionUpdates.updates.dailyCreditsUsed,
+        consumed_meals: subscriptionUpdates.updates.consumedMeals,
+        remaining_meals: subscriptionUpdates.updates.remainingMeals,
+      })
+      .eq('id', subscriptionUpdates.id);
+      
+    if (subError) throw subError;
+  }
 
   return mapOrder(orderData as OrderRow, itemsData as OrderItemRow[]);
 }

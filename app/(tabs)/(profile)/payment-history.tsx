@@ -7,11 +7,7 @@ import { ScreenWrapper } from '@/src/components/layout';
 import { EmptyState } from '@/src/components/ui';
 import { formatCurrency, formatRelativeTime } from '@/src/utils/formatters';
 
-const MOCK_PAYMENTS = [
-  { id: '1', date: new Date().toISOString(), amount: 15.50, method: 'Visa •••• 4242', status: 'completed', description: 'Order #RB-9823' },
-  { id: '2', date: new Date(Date.now() - 86400000).toISOString(), amount: 25.00, method: 'Apple Pay', status: 'completed', description: 'Weekly Subscription' },
-  { id: '3', date: new Date(Date.now() - 86400000 * 5).toISOString(), amount: 8.50, method: 'Visa •••• 4242', status: 'completed', description: 'Order #RB-8734' },
-];
+
 
 export default function PaymentHistoryScreen() {
   const router = useRouter();
@@ -26,31 +22,7 @@ export default function PaymentHistoryScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {MOCK_PAYMENTS.length === 0 ? (
-          <EmptyState icon="card-outline" title="No payments yet" subtitle="Your payment history will appear here." />
-        ) : (
-          MOCK_PAYMENTS.map((payment) => (
-            <View key={payment.id} style={styles.paymentCard}>
-              <View style={styles.iconContainer}>
-                <Ionicons 
-                  name={payment.method.includes('Apple') ? 'logo-apple' : 'card'} 
-                  size={20} 
-                  color={Colors.primary} 
-                />
-              </View>
-              <View style={styles.detailsContainer}>
-                <Text style={styles.description}>{payment.description}</Text>
-                <Text style={styles.methodText}>{payment.method} • {formatRelativeTime(payment.date)}</Text>
-              </View>
-              <View style={styles.amountContainer}>
-                <Text style={styles.amount}>{formatCurrency(payment.amount)}</Text>
-                <Text style={[styles.status, { color: payment.status === 'completed' ? Colors.success : Colors.textSecondary }]}>
-                  {payment.status}
-                </Text>
-              </View>
-            </View>
-          ))
-        )}
+        <EmptyState icon="construct-outline" title="Coming Soon" subtitle="Payment history integration is currently in development." />
       </ScrollView>
     </ScreenWrapper>
   );

@@ -5,29 +5,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
+import { QuantitySelector } from '@/src/components/shared';
 import { useCartStore, useUser } from '@/src/store';
 import { formatCurrency } from '@/src/utils/formatters';
 import { placeOrder } from '@/src/services/orders';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
-import { useActiveMenu, useScheduledMeals } from '@/src/hooks';
+import { useActiveMenu, useScheduledMeals, useActiveSubscription, useSubscriptionPlan } from '@/src/hooks';
+import { processSubscription } from '@/src/utils/subscriptionEngine';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { items, getSubtotal, clearCart } = useCartStore();
+  const { items, getSubtotal, clearCart, updateQuantity, removeItem } = useCartStore();
   const [payment, setPayment] = useState('upi');
   const user = useUser();
   const [isPlacing, setIsPlacing] = useState(false);
-  const subtotal = getSubtotal();
-  const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
-
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+  
   const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
+  const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
+  const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
+
+  const engineResult = processSubscription(items, subscription || null, plan || null, tomorrowDateString);
+  const subtotal = engineResult.newSubtotal;
+  const tax = Math.round(subtotal * 0.05);
+  const total = subtotal + tax;
+  const isSubscriptionApplied = engineResult.subscriptionUpdates !== null;
 
   const handlePlaceOrder = async () => {
     if (!user || items.length === 0) return;
@@ -52,13 +59,16 @@ export default function CheckoutScreen() {
       setIsPlacing(true);
       const stallId = items[0].meal.stallId;
       const stallName = 'RollBowl Main Stall'; // Typically fetched or associated with items
-      await placeOrder(user.id, user.name, stallId, stallName, items, subtotal, tax, total, tomorrowDateString, undefined);
+      
+      const subUpdates = engineResult.subscriptionUpdates && subscription ? { id: subscription.id, updates: engineResult.subscriptionUpdates } : undefined;
+      
+      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, subUpdates, undefined);
       
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
       
       clearCart();
-      router.replace('/(tabs)/(orders)/confirmation' as any);
+      router.replace({ pathname: '/(tabs)/(orders)/confirmation', params: { orderId: newOrder.id } } as any);
     } catch (error) {
       console.error('Failed to place order:', error);
       alert('Failed to place order. Please try again.');
@@ -96,13 +106,67 @@ export default function CheckoutScreen() {
 
       {/* Order Items */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Order Summary</Text>
-        {items.map((item) => (
-          <View key={item.meal.id} style={styles.itemRow}>
-            <Text style={styles.itemText}>{item.quantity}x {item.meal.name}</Text>
-            <Text style={styles.itemPrice}>{formatCurrency(item.meal.price * item.quantity)}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+          <Text style={styles.cardTitle}>Order Summary</Text>
+          {items.length > 0 && (
+            <TouchableOpacity onPress={clearCart}>
+              <Text style={{ color: Colors.error, fontSize: Typography.size.sm, fontFamily: Typography.family.medium }}>Empty Cart</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {engineResult.processedItems.map((item, index) => (
+          <View key={`${item.meal.id}-${index}`} style={styles.itemRow}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: Spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.itemText, { fontFamily: Typography.family.medium }]}>{item.meal.name}</Text>
+                {item.subscriptionId && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Ionicons name="ticket" size={12} color={Colors.primary} style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: Typography.size.xs, color: Colors.primary }}>Subscription Applied</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.itemPrice}>
+                {item.quantity} × {item.unitPrice === 0 ? '₹0' : formatCurrency(Number(item.meal.price))} = {formatCurrency(item.totalPrice)}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <QuantitySelector 
+                quantity={item.quantity} 
+                onIncrement={() => updateQuantity(item.meal.id, item.quantity + 1)} 
+                onDecrement={() => updateQuantity(item.meal.id, Math.max(1, item.quantity - 1))} 
+                min={1} 
+              />
+              {/* Only show delete on the first visual chunk for an item to prevent duplicate buttons */}
+              {index === engineResult.processedItems.findIndex(i => i.meal.id === item.meal.id) && (
+                <TouchableOpacity onPress={() => removeItem(item.meal.id)}>
+                  <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         ))}
+
+        {isSubscriptionApplied && subscription && engineResult.subscriptionUpdates && (
+          <View style={{ marginTop: Spacing.md, padding: Spacing.sm, backgroundColor: Colors.primaryBg, borderRadius: Radii.md }}>
+            <Text style={{ fontSize: Typography.size.sm, fontFamily: Typography.family.semiBold, color: Colors.primary, marginBottom: 4 }}>
+              Subscription Summary
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+              <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Credits Consumed:</Text>
+              <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.textPrimary }}>
+                {engineResult.subscriptionUpdates.consumedMeals - subscription.consumedMeals}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Remaining Credits After Order:</Text>
+              <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.textPrimary }}>
+                {engineResult.subscriptionUpdates.remainingMeals}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Payment */}
@@ -131,8 +195,8 @@ export default function CheckoutScreen() {
         onPress={handlePlaceOrder} 
         fullWidth 
         size="lg" 
-        loading={isPlacing || isLoadingMenu || isLoadingMeals} 
-        disabled={isPlacing || items.length === 0 || isLoadingMenu || isLoadingMeals} 
+        loading={isPlacing || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
+        disabled={isPlacing || items.length === 0 || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
       />
     </ScreenWrapper>
   );
@@ -146,7 +210,7 @@ const styles = StyleSheet.create({
   pickupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   pickupLabel: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginBottom: 2 },
   cardValue: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
+  itemRow: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   itemText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
   itemPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
   payOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.sm, borderRadius: Radii.sm, marginBottom: Spacing.xs },

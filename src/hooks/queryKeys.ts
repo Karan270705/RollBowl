@@ -18,4 +18,9 @@ export const queryKeys = {
     list: (userId: string) => ['orders', 'list', userId] as const,
     detail: (id: string) => ['orders', 'detail', id] as const,
   },
+  subscriptions: {
+    active: (userId: string | undefined) => ['subscriptions', 'active', userId] as const,
+    plan: (planId: string | undefined) => ['subscriptions', 'plan', planId] as const,
+    plans: () => ['subscriptions', 'plans'] as const,
+  }
 } as const;

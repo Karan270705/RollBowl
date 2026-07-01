@@ -4,12 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
-import { Button } from '@/src/components/ui';
-
-const MOCK_ADDRESSES = [
-  { id: '1', title: 'Hostel Room', address: 'Room 402, Block B, Main Campus', isDefault: true },
-  { id: '2', title: 'Department', address: 'CS Department, 2nd Floor, Lab 3', isDefault: false },
-];
+import { EmptyState } from '@/src/components/ui';
 
 export default function AddressesScreen() {
   const router = useRouter();
@@ -24,33 +19,7 @@ export default function AddressesScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {MOCK_ADDRESSES.map((addr) => (
-          <View key={addr.id} style={styles.addressCard}>
-            <View style={styles.addressHeader}>
-              <View style={styles.titleRow}>
-                <Ionicons name={addr.title.includes('Hostel') ? 'home' : 'business'} size={20} color={Colors.primary} />
-                <Text style={styles.addressTitle}>{addr.title}</Text>
-                {addr.isDefault && (
-                  <View style={styles.defaultBadge}>
-                    <Text style={styles.defaultText}>Default</Text>
-                  </View>
-                )}
-              </View>
-              <TouchableOpacity>
-                <Ionicons name="create-outline" size={20} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.addressText}>{addr.address}</Text>
-          </View>
-        ))}
-
-        <Button 
-          title="Add New Address" 
-          variant="outline" 
-          leftIcon={<Ionicons name="add" size={20} color={Colors.primary} />}
-          style={styles.addButton}
-          onPress={() => {}}
-        />
+        <EmptyState icon="map-outline" title="Coming Soon" subtitle="Multiple saved addresses will be supported in a future update." />
       </ScrollView>
     </ScreenWrapper>
   );

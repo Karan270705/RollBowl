@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { useUser, useAuthStore } from '@/src/store';
-import { MOCK_COLLEGES, MOCK_CITIES, MOCK_SUBSCRIPTION } from '@/src/constants/mockData';
+import { MOCK_COLLEGES, MOCK_CITIES } from '@/src/constants/mockData';
 import { getInitials } from '@/src/utils/formatters';
 
 const MENU_ITEMS = [
@@ -43,18 +43,6 @@ export default function ProfileScreen() {
         </View>
         <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} />
       </TouchableOpacity>
-
-      {/* Subscription Badge */}
-      <View style={styles.subCard}>
-        <Ionicons name="ribbon-outline" size={22} color={Colors.primary} />
-        <View style={styles.subInfo}>
-          <Text style={styles.subName}>{MOCK_SUBSCRIPTION.planName} Plan</Text>
-          <Text style={styles.subDetail}>{MOCK_SUBSCRIPTION.remainingMeals} meals remaining</Text>
-        </View>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/(subscription)' as any)}>
-          <Text style={styles.manageText}>Manage</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Menu */}
       <View style={styles.menuCard}>

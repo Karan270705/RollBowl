@@ -9,7 +9,6 @@ import { SearchBar, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
 import { useAllMeals, useActiveMenu, useScheduledMeals } from '@/src/hooks';
-import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS } from '@/src/constants/mockData';
 import { getGreeting } from '@/src/utils/formatters';
 import { MenuStoreState } from '@/src/utils/menuState';
 import { Button } from '@/src/components/ui';
@@ -53,8 +52,6 @@ export default function HomeScreen() {
       return matchesCategory && matchesSearch;
     });
   }, [allMeals, selectedCategory, search]);
-
-  const unreadNotifs = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
 
   // ─── Loading state ─────────────────────────────────────────
   if (isLoading) {
@@ -103,26 +100,8 @@ export default function HomeScreen() {
         </View>
         <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(tabs)/(notifications)' as any)}>
           <Ionicons name="notifications-outline" size={24} color={Colors.textPrimary} />
-          {unreadNotifs > 0 && <View style={styles.notifDot} />}
         </TouchableOpacity>
       </View>
-
-      {/* Subscription Banner */}
-      <TouchableOpacity
-        style={styles.subBanner}
-        onPress={() => router.push('/(tabs)/(subscription)' as any)}
-        activeOpacity={0.85}
-      >
-        <LinearGradient colors={['#C41E24', '#E04040']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.subGradient}>
-          <View style={styles.subInfo}>
-            <Text style={styles.subTitle}>🎫 {MOCK_SUBSCRIPTION.planName} Plan Active</Text>
-            <Text style={styles.subDetail}>
-              {MOCK_SUBSCRIPTION.remainingMeals} meals remaining • Expires {MOCK_SUBSCRIPTION.endDate}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.8)" />
-        </LinearGradient>
-      </TouchableOpacity>
 
       {/* Store Status Banner */}
       <View style={[styles.statusBanner, { backgroundColor: storeStatus.isOrderingOpen ? Colors.successLight : Colors.primaryBg }]}>
@@ -190,7 +169,7 @@ export default function HomeScreen() {
         ) : (
           filteredCatalog.map((meal) => {
             const isScheduled = availableMeals.some(m => m.id === meal.id);
-            const isOrderable = storeStatus.isOrderingOpen && meal.isAvailable && isScheduled;
+            const isOrderable = storeStatus.isOrderingOpen && isScheduled;
             
             return (
               <MealCard

@@ -63,7 +63,7 @@ export default function MealDetailScreen() {
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : Colors.error;
   const isScheduled = availableMeals.some(m => m.id === meal.id);
-  const isOrderable = storeStatus?.isOrderingOpen && meal.isAvailable && isScheduled;
+  const isOrderable = storeStatus?.isOrderingOpen && isScheduled;
 
   return (
     <View style={styles.container}>

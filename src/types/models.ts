@@ -124,6 +124,8 @@ export interface OrderItem {
   unitPrice: number;
   totalPrice: number;
   specialInstructions?: string;
+  subscriptionId?: string;
+  creditsUsed?: number;
 }
 
 export interface Order {
@@ -161,6 +163,7 @@ export interface SubscriptionPlan {
   features: string[];
   isPopular: boolean;
   badge?: string;
+  categoryCreditCosts: Record<string, number>;
 }
 
 export interface Subscription {
@@ -175,6 +178,8 @@ export interface Subscription {
   consumedMeals: number;
   remainingMeals: number;
   mealsPerDay: number;
+  lastUsageDate?: string;
+  dailyCreditsUsed: number;
 }
 
 export interface MealHistory {
