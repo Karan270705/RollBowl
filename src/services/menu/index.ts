@@ -21,8 +21,6 @@ export async function fetchActiveMenuSchedule(targetDate: string): Promise<MenuS
     .select('*')
     .eq('menu_date', targetDate)
     .eq('is_published', true)
-    .lte('visible_from', now)
-    .gte('order_cutoff', now)
     .maybeSingle();
 
   if (error) {

@@ -28,4 +28,10 @@ export const AppConfig = {
     SOCIAL_LOGIN_ENABLED: false,
     PAYMENT_GATEWAY_ENABLED: false,
   },
+  
+  // Business Operations
+  BUSINESS: {
+    PICKUP_START_TIME: '12:00', // 24h format HH:mm
+    PICKUP_END_TIME: '14:00',
+  }
 } as const;

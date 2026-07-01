@@ -11,6 +11,7 @@ import { useUser, useCartStore } from '@/src/store';
 import { useAllMeals, useActiveMenu, useScheduledMeals } from '@/src/hooks';
 import { MOCK_SUBSCRIPTION, MOCK_NOTIFICATIONS } from '@/src/constants/mockData';
 import { getGreeting } from '@/src/utils/formatters';
+import { MenuStoreState } from '@/src/utils/menuState';
 import { Button } from '@/src/components/ui';
 
 export default function HomeScreen() {
@@ -20,14 +21,23 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ─── Tomorrow's Menu: driven by menu schedules ────────────────────
+  // ─── Menu Schedules ────────────────────────────────────
+  const todayDate = new Date();
+  const todayDateString = todayDate.toISOString().split('T')[0];
+  
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
   
-  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  // Tomorrow's Menu
+  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
   const { data: availableMeals = [], isLoading: isLoadingMeals, isError, error, refetch } = useScheduledMeals(activeMenu?.id);
-  const isLoading = isLoadingMenu || isLoadingMeals;
+  
+  // Today's Menu (mostly for reference during pickup)
+  const { data: todayMenu, isLoading: isLoadingTodayMenu } = useActiveMenu(todayDateString);
+  const { data: todayMeals = [], isLoading: isLoadingTodayMeals } = useScheduledMeals(todayMenu?.id);
+
+  const isLoading = isLoadingMenu || isLoadingMeals || isLoadingTodayMenu || isLoadingTodayMeals;
 
   // ─── Browse Catalog: full catalog (available + unavailable) ─
   const { data: allMeals = [] } = useAllMeals();
@@ -114,6 +124,32 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
+      {/* Store Status Banner */}
+      <View style={[styles.statusBanner, { backgroundColor: storeStatus.isOrderingOpen ? Colors.successLight : Colors.primaryBg }]}>
+        <Ionicons name={storeStatus.isOrderingOpen ? "checkmark-circle" : "time-outline"} size={24} color={storeStatus.isOrderingOpen ? Colors.success : Colors.primary} />
+        <View style={styles.statusInfo}>
+          <Text style={[styles.statusTitle, { color: storeStatus.isOrderingOpen ? Colors.success : Colors.primary }]}>{storeStatus.title}</Text>
+          <Text style={styles.statusSubtitle}>{storeStatus.subtitle}</Text>
+        </View>
+      </View>
+
+      {/* ─── Section: Today's Menu (Only shown during Pickup) ─── */}
+      {storeStatus.state === MenuStoreState.PICKUP_ACTIVE && todayMeals.length > 0 && (
+        <Section title={`Today's Menu (Pickup Active)`}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
+            {todayMeals.map((meal) => (
+              <MealCard
+                key={`today-${meal.id}`}
+                meal={meal}
+                prominent
+                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+                isOrderable={false} // Can't order today's menu now
+              />
+            ))}
+          </ScrollView>
+        </Section>
+      )}
+
       {/* ─── Section 1: Tomorrow's Menu (horizontal scroll, scheduled only) ─── */}
       {availableMeals.length > 0 && (
         <Section title={`Tomorrow's Menu  (${availableMeals.length})`}>
@@ -124,7 +160,8 @@ export default function HomeScreen() {
                 meal={meal}
                 prominent
                 onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                onAddToCart={() => addItem(meal, 1)}
+                onAddToCart={storeStatus.isOrderingOpen ? () => addItem(meal, 1) : undefined}
+                isOrderable={storeStatus.isOrderingOpen}
               />
             ))}
           </ScrollView>
@@ -153,7 +190,7 @@ export default function HomeScreen() {
         ) : (
           filteredCatalog.map((meal) => {
             const isScheduled = availableMeals.some(m => m.id === meal.id);
-            const isOrderable = meal.isAvailable && isScheduled;
+            const isOrderable = storeStatus.isOrderingOpen && meal.isAvailable && isScheduled;
             
             return (
               <MealCard
@@ -191,4 +228,11 @@ const styles = StyleSheet.create({
   subInfo: { flex: 1 },
   subTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.white },
   subDetail: { fontSize: Typography.size.sm, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  statusBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    padding: Spacing.base, borderRadius: Radii.lg, marginBottom: Spacing.base,
+  },
+  statusInfo: { flex: 1 },
+  statusTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold },
+  statusSubtitle: { fontSize: Typography.size.sm, color: Colors.textSecondary, marginTop: 2 },
 });

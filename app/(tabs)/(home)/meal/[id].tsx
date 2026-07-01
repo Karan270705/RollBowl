@@ -20,7 +20,7 @@ export default function MealDetailScreen() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
-  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
 
   if (isLoading || isLoadingMenu || isLoadingMeals) {
@@ -63,7 +63,7 @@ export default function MealDetailScreen() {
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : Colors.error;
   const isScheduled = availableMeals.some(m => m.id === meal.id);
-  const isOrderable = meal.isAvailable && isScheduled;
+  const isOrderable = storeStatus?.isOrderingOpen && meal.isAvailable && isScheduled;
 
   return (
     <View style={styles.container}>
@@ -102,7 +102,9 @@ export default function MealDetailScreen() {
           {!isOrderable && (
             <View style={styles.unavailableBanner}>
               <Ionicons name="time-outline" size={18} color={Colors.error} />
-              <Text style={styles.unavailableBannerText}>Not available for tomorrow's menu</Text>
+              <Text style={styles.unavailableBannerText}>
+                {!isScheduled ? "Not available for tomorrow's menu" : storeStatus?.subtitle || "Ordering is currently closed"}
+              </Text>
             </View>
           )}
 
@@ -152,7 +154,9 @@ export default function MealDetailScreen() {
       ) : (
         <View style={styles.bottomBarDisabled}>
           <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
-          <Text style={styles.disabledText}>This item is not available for tomorrow</Text>
+          <Text style={styles.disabledText}>
+            {!isScheduled ? "This item is not available for tomorrow" : "Ordering is closed"}
+          </Text>
         </View>
       )}
     </View>

@@ -26,12 +26,18 @@ export default function CheckoutScreen() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
-  const { data: activeMenu, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
 
   const handlePlaceOrder = async () => {
     if (!user || items.length === 0) return;
     
+    // Store Status Validation
+    if (!storeStatus?.isOrderingOpen) {
+      alert(storeStatus?.subtitle || 'Ordering is currently closed.');
+      return;
+    }
+
     // Cart Validation
     const invalidItems = items.filter(cartItem => 
       !scheduledMeals.some(meal => meal.id === cartItem.meal.id)
