@@ -92,7 +92,7 @@ export default function OrderDetailsScreen() {
                   <Text style={styles.itemName}>{item.mealName}</Text>
                   {/* Add-ons unsupported in current DB schema for order items, omitting */}
                 </View>
-                <Text style={styles.itemPrice}>{formatCurrency(item.price * item.quantity)}</Text>
+                <Text style={styles.itemPrice}>{formatCurrency(item.totalPrice)}</Text>
               </View>
             ))}
           </View>

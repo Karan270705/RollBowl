@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
-import { useUser, useAuthStore } from '@/src/store';
+import { useUser, useAuthStore, useCartStore, useAppStore } from '@/src/store';
+import { useQueryClient } from '@tanstack/react-query';
 import { MOCK_COLLEGES, MOCK_CITIES } from '@/src/constants/mockData';
 import { getInitials } from '@/src/utils/formatters';
 
@@ -20,6 +21,9 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = useUser();
   const logout = useAuthStore((s) => s.logout);
+  const clearCart = useCartStore((s) => s.clearCart);
+  const resetApp = useAppStore((s) => s.resetApp);
+  const queryClient = useQueryClient();
   const college = MOCK_COLLEGES.find((c) => c.id === user?.collegeId);
   const city = MOCK_CITIES.find((c) => c.id === user?.cityId);
 
@@ -59,7 +63,16 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => { logout(); router.replace('/(auth)/login'); }}>
+      <TouchableOpacity 
+        style={styles.logoutBtn} 
+        onPress={() => { 
+          clearCart(); 
+          resetApp(); 
+          queryClient.clear(); 
+          logout(); 
+          router.replace('/(auth)/login'); 
+        }}
+      >
         <Ionicons name="log-out-outline" size={22} color={Colors.error} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>

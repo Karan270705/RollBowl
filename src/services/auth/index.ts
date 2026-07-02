@@ -9,6 +9,8 @@ export const signIn = async ({ email, password }: LoginRequest) => {
   return data;
 };
 
+import { NotificationEvents } from '@/src/services/notifications';
+
 export const signUp = async ({ name, email, phone, password }: SignupRequest) => {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -24,6 +26,11 @@ export const signUp = async ({ name, email, phone, password }: SignupRequest) =>
   console.log('SIGNUP SESSION', data.session);
   console.log('SIGNUP ERROR', error);
   if (error) throw error;
+  
+  if (data.user) {
+    await NotificationEvents.notifyWelcome(data.user.id);
+  }
+  
   return data;
 };
 

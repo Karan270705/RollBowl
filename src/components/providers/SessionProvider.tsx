@@ -2,8 +2,10 @@ import React, { useEffect } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useAuthStore } from '@/src/store';
 import { fetchUserProfile } from '@/src/services/auth';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const setSession = useAuthStore((s) => s.setSession);
   const setInitializing = useAuthStore((s) => s.setInitializing);
 
@@ -17,6 +19,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
               console.warn('Profile missing. Clearing stale session.');
               supabase.auth.signOut();
               setSession(null, null);
+              queryClient.clear();
             } else {
               setSession(session, user);
             }
@@ -30,6 +33,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           });
       } else {
         setSession(null, null);
+        queryClient.clear();
         setInitializing(false);
       }
     });
@@ -45,6 +49,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             console.warn('Profile missing. Clearing stale session.');
             await supabase.auth.signOut();
             setSession(null, null);
+            queryClient.clear();
           } else {
             setSession(session, user);
           }
@@ -54,6 +59,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setSession(null, null);
+        queryClient.clear();
       }
     });
 

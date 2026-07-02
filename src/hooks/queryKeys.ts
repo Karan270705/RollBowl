@@ -22,5 +22,6 @@ export const queryKeys = {
     active: (userId: string | undefined) => ['subscriptions', 'active', userId] as const,
     plan: (planId: string | undefined) => ['subscriptions', 'plan', planId] as const,
     plans: () => ['subscriptions', 'plans'] as const,
+    history: (subscriptionId: string | undefined) => ['subscriptions', 'history', subscriptionId] as const,
   }
 } as const;

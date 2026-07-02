@@ -1,5 +1,6 @@
 import { supabase } from '@/src/lib/supabase';
 import { Meal } from '@/src/types/models';
+import { NotificationEvents } from '@/src/services/notifications';
 
 export interface MenuSchedule {
   id: string;
@@ -78,8 +79,21 @@ export async function fetchScheduledMeals(scheduleId: string): Promise<Meal[]> {
         preparationTime: row.preparation_time,
         servingSize: row.serving_size ?? undefined,
         nutrition: hasNutrition ? row.nutrition : undefined,
-        tags: row.tags ?? [],
       } as Meal;
     })
     .filter(Boolean) as Meal[];
+}
+
+export async function publishMenu(scheduleId: string, date: string, notifyUsers: string[]) {
+  const { error } = await supabase
+    .from('menu_schedules')
+    .update({ is_published: true })
+    .eq('id', scheduleId);
+
+  if (error) throw error;
+
+  // Notify all provided users (typically fetched from users table who are active/subscribed)
+  for (const userId of notifyUsers) {
+    await NotificationEvents.notifyMenuPublished(userId, date);
+  }
 }

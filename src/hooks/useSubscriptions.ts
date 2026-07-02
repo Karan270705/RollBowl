@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getActiveSubscription, getSubscriptionPlan, getAllSubscriptionPlans, simulatePurchase } from '@/src/services/subscriptions';
+import { getActiveSubscription, getSubscriptionPlan, getAllSubscriptionPlans, simulatePurchase, getSubscriptionUsageHistory } from '@/src/services/subscriptions';
 import { SubscriptionPlan } from '@/src/types/models';
 import { queryKeys } from './queryKeys';
 
@@ -33,5 +33,13 @@ export function usePurchaseSubscription() {
     onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions?.active(userId) || ['subscriptions', 'active', userId] });
     },
+  });
+}
+
+export function useSubscriptionUsageHistory(subscriptionId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.subscriptions.history(subscriptionId),
+    queryFn: () => getSubscriptionUsageHistory(subscriptionId!),
+    enabled: !!subscriptionId,
   });
 }

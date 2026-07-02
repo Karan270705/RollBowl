@@ -1,6 +1,7 @@
 import { supabase } from '@/src/lib/supabase';
 import { Order, OrderItem } from '@/src/types/models';
 import { OrderStatus, OrderType, PaymentStatus } from '@/src/constants/enums';
+import { NotificationEvents } from '@/src/services/notifications';
 
 // ─── DB Row Types ────────────────────────────────────────────
 
@@ -187,8 +188,8 @@ export async function placeOrder(
     quantity: item.quantity,
     unit_price: item.unitPrice,
     total_price: item.totalPrice,
-    subscription_id: item.subscriptionId,
-    credits_used: item.creditsUsed,
+    subscription_id: item.subscriptionId ?? null,
+    credits_used: item.creditsUsed ?? 0,
   }));
 
   const { data: itemsData, error: itemsError } = await supabase
@@ -213,5 +214,34 @@ export async function placeOrder(
     if (subError) throw subError;
   }
 
+  await NotificationEvents.notifyOrderPlaced(userId, orderNumber, orderData.id);
+
   return mapOrder(orderData as OrderRow, itemsData as OrderItemRow[]);
+}
+
+export async function updateOrderStatus(orderId: string, status: OrderStatus, userId: string, orderNumber: string) {
+  const { error } = await supabase
+    .from('orders')
+    .update({ status })
+    .eq('id', orderId);
+
+  if (error) throw error;
+
+  switch (status) {
+    case OrderStatus.PREPARING:
+      await NotificationEvents.notifyOrderPreparing(userId, orderNumber, orderId);
+      break;
+    case OrderStatus.READY:
+      await NotificationEvents.notifyOrderReady(userId, orderNumber, orderId);
+      break;
+    case OrderStatus.PICKED_UP:
+      await NotificationEvents.notifyOrderCollected(userId, orderNumber, orderId);
+      break;
+    case OrderStatus.CANCELLED:
+      await NotificationEvents.notifyOrderCancelled(userId, orderNumber, orderId);
+      break;
+    // Note: ORDER_ACCEPTED is not a strict enum state in this app, usually it's transition to PREPARING
+    default:
+      break;
+  }
 }

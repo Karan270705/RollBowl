@@ -67,6 +67,12 @@ export default function CheckoutScreen() {
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
       
+      // Invalidate subscription cache so Remaining Credits and Usage History update immediately
+      await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.active(user.id) });
+      if (subscription) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.history(subscription.id) });
+      }
+      
       clearCart();
       router.replace({ pathname: '/(tabs)/(orders)/confirmation', params: { orderId: newOrder.id } } as any);
     } catch (error) {

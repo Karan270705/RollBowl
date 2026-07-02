@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   content: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing['3xl'],
   },
   paymentCard: {
     flexDirection: 'row',
