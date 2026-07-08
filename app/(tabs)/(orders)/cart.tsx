@@ -22,8 +22,8 @@ export default function CartScreen() {
         <EmptyState
           icon="cart-outline"
           title="Your cart is empty"
-          subtitle="Add some delicious meals to get started"
-          action={<Button title="Browse Meals" onPress={() => router.push('/(tabs)/(home)' as any)} />}
+          subtitle="Add some delicious items to get started"
+          action={<Button title="Browse Items" onPress={() => router.push('/(tabs)/(home)' as any)} />}
         />
       </ScreenWrapper>
     );

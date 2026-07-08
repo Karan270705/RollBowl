@@ -7,7 +7,7 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 
 const FAQS = [
   { question: 'How do I cancel my subscription?', answer: 'You can cancel your subscription at any time from the Subscription tab. Your plan will remain active until the end of the current billing cycle.' },
-  { question: 'What happens if I miss a meal pickup?', answer: 'Unclaimed meals will expire at the end of the service period and cannot be rolled over to the next day.' },
+  { question: 'What happens if I miss an item pickup?', answer: 'Unclaimed items will expire at the end of the service period and cannot be rolled over to the next day.' },
   { question: 'How can I change my dietary preferences?', answer: 'You can update your dietary preferences in the Edit Profile screen.' },
 ];
 
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   content: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xl,
   },
   contactContainer: {
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 import { ScreenWrapper, Section } from '@/src/components/layout';
 import { Button, LoadingSpinner, StatusBadge } from '@/src/components/ui';
-import { OrderStatus } from '@/src/constants/enums';
+import { OrderStatus, PaymentMethodLabels, PaymentStatus } from '@/src/constants/enums';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
 import { useOrder } from '@/src/hooks';
 import { formatCurrency, formatRelativeTime } from '@/src/utils/formatters';
@@ -113,6 +113,19 @@ export default function OrderDetailsScreen() {
         <Section title="Payment Summary">
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Payment Method</Text>
+              <Text style={styles.summaryValue}>{PaymentMethodLabels[order.paymentMethod] || 'Unknown'}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Payment Status</Text>
+              <Text style={[
+                styles.summaryValue, 
+                { color: order.paymentStatus === PaymentStatus.PENDING ? Colors.warning : Colors.success }
+              ]}>
+                {order.paymentStatus === PaymentStatus.PENDING ? 'Pending Payment' : 'Paid'}
+              </Text>
+            </View>
+            <View style={[styles.summaryRow, { marginTop: Spacing.sm, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.borderLight }]}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
             </View>

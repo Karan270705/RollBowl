@@ -11,6 +11,7 @@ import {
   OrderStatus,
   OrderType,
   PaymentStatus,
+  PaymentMethod,
   SubscriptionStatus,
   UserRole,
 } from '@/src/constants/enums';
@@ -139,6 +140,7 @@ export interface Order {
   status: OrderStatus;
   orderType: OrderType;
   paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
   subtotal: number;
   tax: number;
   discount: number;

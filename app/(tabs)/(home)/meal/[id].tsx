@@ -29,7 +29,7 @@ export default function MealDetailScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <LoadingSpinner fullScreen message="Loading meal..." />
+        <LoadingSpinner fullScreen message="Loading item..." />
       </View>
     );
   }
@@ -42,7 +42,7 @@ export default function MealDetailScreen() {
         </TouchableOpacity>
         <EmptyState
           icon="cloud-offline-outline"
-          title="Couldn't load meal"
+          title="Couldn't load item"
           subtitle={error?.message ?? 'Something went wrong.'}
           action={<Button title="Go Back" onPress={() => router.back()} variant="primary" size="sm" />}
         />
@@ -56,7 +56,7 @@ export default function MealDetailScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <EmptyState icon="restaurant-outline" title="Meal not found" subtitle="This meal may no longer be available." />
+        <EmptyState icon="restaurant-outline" title="Item not found" subtitle="This item may no longer be available." />
       </View>
     );
   }

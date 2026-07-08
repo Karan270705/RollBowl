@@ -65,7 +65,7 @@ export default function NotificationsScreen() {
     if (n.body) return n.body;
     const orderNum = n.data?.orderNumber || 'your order';
     switch (n.data?.event) {
-      case 'ORDER_PREPARING': return `Your meal for order ${orderNum} is currently being prepared.`;
+      case 'ORDER_PREPARING': return `Your item for order ${orderNum} is currently being prepared.`;
       case 'ORDER_READY': return `Your order ${orderNum} is ready for pickup!`;
       case 'ORDER_COLLECTED': return `Order ${orderNum} has been successfully collected. Enjoy your meal!`;
       case 'ORDER_CANCELLED': return `Your order ${orderNum} has been cancelled.`;

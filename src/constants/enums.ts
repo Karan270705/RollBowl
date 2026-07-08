@@ -25,6 +25,12 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
 }
 
+export enum PaymentMethod {
+  UPI = 'upi',
+  CARD = 'card',
+  CASH = 'cash',
+}
+
 export enum SubscriptionStatus {
   ACTIVE = 'active',
   PAUSED = 'paused',
@@ -76,4 +82,10 @@ export const OrderStatusColors: Record<OrderStatus, string> = {
   [OrderStatus.READY]: '#2E7D32',       // Brand green
   [OrderStatus.PICKED_UP]: '#7B1FA2',   // Purple (distinct)
   [OrderStatus.CANCELLED]: '#C41E24',   // Brand red
+};
+
+export const PaymentMethodLabels: Record<PaymentMethod, string> = {
+  [PaymentMethod.UPI]: 'UPI',
+  [PaymentMethod.CARD]: 'Debit/Credit Card',
+  [PaymentMethod.CASH]: 'Cash on Pickup',
 };

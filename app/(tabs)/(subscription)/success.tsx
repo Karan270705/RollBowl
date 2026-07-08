@@ -20,7 +20,7 @@ export default function SubscriptionSuccessScreen() {
 
         <Text style={styles.title}>You're Subscribed!</Text>
         <Text style={styles.subtitle}>
-          Your subscription is now active. You can manage your meals from your profile.
+          Your subscription is now active. You can manage your items from your profile.
         </Text>
 
         <View style={styles.infoBox}>
@@ -30,7 +30,7 @@ export default function SubscriptionSuccessScreen() {
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="restaurant-outline" size={20} color={Colors.primary} />
-            <Text style={styles.infoText}>Ready to pick your meals?</Text>
+            <Text style={styles.infoText}>Ready to pick your items?</Text>
           </View>
         </View>
       </View>
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   title: {
-    fontSize: Typography.size.xxl,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
     marginBottom: Spacing.sm,
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.xl,
     paddingHorizontal: Spacing.lg,
   },
   infoBox: {

@@ -1,10 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
+import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -20,7 +20,7 @@ export default function ReservationSuccessScreen() {
 
         <Text style={styles.title}>Reservation Confirmed!</Text>
         <Text style={styles.subtitle}>
-          Your extra meal has been successfully reserved. Please present this QR code at the stall to collect your meal.
+          Your extra item has been successfully reserved. Please present this QR code at the stall to collect your item.
         </Text>
 
         <View style={styles.qrCard}>
@@ -42,10 +42,10 @@ export default function ReservationSuccessScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Button 
-          title="Back to Home" 
-          onPress={() => router.replace('/(tabs)/(home)' as any)} 
-          fullWidth 
+        <Button
+          title="Back to Home"
+          onPress={() => router.replace('/(tabs)/(home)' as any)}
+          fullWidth
         />
       </View>
     </ScreenWrapper>
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: Spacing.xl,
-    paddingTop: Spacing.xxl,
+    paddingTop: Spacing.xl,
   },
   iconCircle: {
     width: 120,
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   title: {
-    fontSize: Typography.size.xxl,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
     marginBottom: Spacing.sm,

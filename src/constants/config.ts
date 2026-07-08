@@ -35,3 +35,5 @@ export const AppConfig = {
     PICKUP_END_TIME: '14:00',
   }
 } as const;
+
+export const PICKUP_LOCATION = "RollBowl (MIT-WPU, Main Gate)";

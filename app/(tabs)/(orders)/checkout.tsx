@@ -13,12 +13,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
 import { useActiveMenu, useScheduledMeals, useActiveSubscription, useSubscriptionPlan } from '@/src/hooks';
 import { processSubscription } from '@/src/utils/subscriptionEngine';
+import { PaymentMethod } from '@/src/constants/enums';
+import { PICKUP_LOCATION } from '@/src/constants/config';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, getSubtotal, clearCart, updateQuantity, removeItem } = useCartStore();
-  const [payment, setPayment] = useState('upi');
+  const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
   const user = useUser();
   const [isPlacing, setIsPlacing] = useState(false);
   const [pickupSlot, setPickupSlot] = useState<string>('12:00–12:30');
@@ -59,11 +61,11 @@ export default function CheckoutScreen() {
     try {
       setIsPlacing(true);
       const stallId = items[0].meal.stallId;
-      const stallName = 'RollBowl Main Stall'; // Typically fetched or associated with items
+      const stallName = PICKUP_LOCATION; // Centralized pickup location
       
       const subUpdates = engineResult.subscriptionUpdates && subscription ? { id: subscription.id, updates: engineResult.subscriptionUpdates } : undefined;
       
-      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, pickupSlot, subUpdates, undefined);
+      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, pickupSlot, payment, subUpdates, undefined);
       
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
@@ -182,13 +184,24 @@ export default function CheckoutScreen() {
       {/* Payment */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Payment Method</Text>
-        {[{ key: 'upi', label: 'UPI', icon: 'phone-portrait-outline' as const }, { key: 'card', label: 'Card', icon: 'card-outline' as const }, { key: 'cash', label: 'Cash', icon: 'cash-outline' as const }].map((p) => (
+        {[
+          { key: PaymentMethod.UPI, label: 'UPI', icon: 'phone-portrait-outline' as const }, 
+          { key: PaymentMethod.CARD, label: 'Debit/Credit Card', icon: 'card-outline' as const }, 
+          { key: PaymentMethod.CASH, label: 'Cash on Pickup', icon: 'cash-outline' as const }
+        ].map((p) => (
           <TouchableOpacity key={p.key} style={[styles.payOption, payment === p.key && styles.payActive]} onPress={() => setPayment(p.key)}>
             <Ionicons name={p.icon} size={20} color={payment === p.key ? Colors.primary : Colors.textSecondary} />
             <Text style={[styles.payText, payment === p.key && styles.payTextActive]}>{p.label}</Text>
             {payment === p.key && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} style={{ marginLeft: 'auto' }} />}
           </TouchableOpacity>
         ))}
+        {payment === PaymentMethod.CASH && (
+          <View style={{ marginTop: Spacing.sm, padding: Spacing.sm, backgroundColor: Colors.surfaceElevated, borderRadius: Radii.md }}>
+            <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, fontStyle: 'italic' }}>
+              Please pay at the {PICKUP_LOCATION} counter during pickup.
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Total */}
@@ -197,6 +210,13 @@ export default function CheckoutScreen() {
         <View style={styles.totalRow}><Text style={styles.totalLabel}>Tax</Text><Text style={styles.totalVal}>{formatCurrency(tax)}</Text></View>
         <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
           <Text style={styles.grandLabel}>Total</Text><Text style={styles.grandVal}>{formatCurrency(total)}</Text>
+        </View>
+        <View style={styles.pickupRow}>
+          <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} />
+          <View>
+            <Text style={styles.pickupLabel}>Pickup Location</Text>
+            <Text style={styles.cardValue}>{PICKUP_LOCATION}</Text>
+          </View>
         </View>
       </View>
 

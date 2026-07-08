@@ -63,7 +63,7 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
           </View>
         </View>
-        <LoadingSpinner fullScreen message="Loading meals..." />
+        <LoadingSpinner fullScreen message="Loading items..." />
       </ScreenWrapper>
     );
   }
@@ -80,7 +80,7 @@ export default function HomeScreen() {
         </View>
         <EmptyState
           icon="cloud-offline-outline"
-          title="Couldn't load meals"
+          title="Couldn't load items"
           subtitle={error?.message ?? 'Something went wrong. Please try again.'}
           action={
             <Button title="Retry" onPress={() => refetch()} variant="primary" size="sm" />
@@ -159,11 +159,11 @@ export default function HomeScreen() {
         {filteredCatalog.length === 0 ? (
           <EmptyState
             icon="restaurant-outline"
-            title="No meals found"
+            title="No items found"
             subtitle={
               search.trim()
                 ? `No results for "${search}". Try a different search.`
-                : 'No meals in this category.'
+                : 'No items in this category.'
             }
           />
         ) : (

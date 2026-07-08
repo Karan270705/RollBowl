@@ -58,7 +58,7 @@ export default function SubscriptionScreen() {
               <View style={styles.expiryMessage}>
                 <Ionicons name="warning" size={20} color={Colors.warningDark} />
                 <Text style={styles.expiryText}>
-                  {subscription.status === 'expired' ? 'Your subscription has expired. Renew to continue enjoying meals.' : 
+                  {subscription.status === 'expired' ? 'Your subscription has expired. Renew to continue enjoying items.' : 
                    subscription.status === 'paused' ? 'Your subscription is currently paused.' : 
                    'Your subscription has been cancelled.'}
                 </Text>

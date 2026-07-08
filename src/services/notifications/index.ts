@@ -84,7 +84,7 @@ export const NotificationEvents = {
       userId,
       type: NotificationType.SYSTEM,
       title: 'Welcome to RollBowl!',
-      body: 'Your account is ready. Start exploring delicious meals now.',
+      body: 'Your account is ready. Start exploring delicious items now.',
     });
   },
 
@@ -94,7 +94,7 @@ export const NotificationEvents = {
       userId,
       type: NotificationType.SUBSCRIPTION,
       title: 'Subscription Activated',
-      body: `Your ${planName} is now active. Enjoy your meals!`,
+      body: `Your ${planName} is now active. Enjoy your items!`,
     });
   },
   
@@ -113,7 +113,7 @@ export const NotificationEvents = {
       userId,
       type: NotificationType.SUBSCRIPTION,
       title: 'Subscription Expired',
-      body: 'Your subscription has expired. Renew to continue enjoying meals.',
+      body: 'Your subscription has expired. Renew to continue enjoying items.',
       data: { event: 'SUBSCRIPTION_EXPIRED', subscriptionId }
     });
   },
@@ -155,7 +155,7 @@ export const NotificationEvents = {
       userId,
       type: NotificationType.ORDER_UPDATE,
       title: 'Order Preparing',
-      body: `Your meal for order ${orderNumber} is currently being prepared.`,
+      body: `Your item for order ${orderNumber} is currently being prepared.`,
       data: { orderId }
     });
   },

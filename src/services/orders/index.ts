@@ -15,6 +15,7 @@ interface OrderRow {
   status: string;
   order_type: string;
   payment_status: string;
+  payment_method: string;
   subtotal: number;
   tax: number;
   discount: number;
@@ -67,6 +68,7 @@ function mapOrder(orderRow: OrderRow, itemsRows: OrderItemRow[] = []): Order {
     status: orderRow.status as OrderStatus,
     orderType: orderRow.order_type as OrderType,
     paymentStatus: orderRow.payment_status as PaymentStatus,
+    paymentMethod: orderRow.payment_method as import('@/src/constants/enums').PaymentMethod,
     subtotal: Number(orderRow.subtotal),
     tax: Number(orderRow.tax),
     discount: Number(orderRow.discount),
@@ -156,6 +158,7 @@ export async function placeOrder(
   total: number,
   pickupDate: string,
   expectedPickupSlot: string,
+  paymentMethod: import('@/src/constants/enums').PaymentMethod,
   subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
   notes?: string
 ): Promise<Order> {
@@ -171,7 +174,8 @@ export async function placeOrder(
       stall_name: stallName,
       status: OrderStatus.PENDING,
       order_type: OrderType.ON_STALL,
-      payment_status: PaymentStatus.PAID,
+      payment_status: paymentMethod === 'cash' ? PaymentStatus.PENDING : PaymentStatus.PAID,
+      payment_method: paymentMethod,
       subtotal,
       tax,
       discount: 0,
