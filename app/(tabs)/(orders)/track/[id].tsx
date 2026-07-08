@@ -1,13 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
-import { Button } from '@/src/components/ui';
-import { LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { Timeline, TimelineStep } from '@/src/components/shared';
-import { useOrder } from '@/src/hooks';
+import { Button, EmptyState, LoadingSpinner } from '@/src/components/ui';
 import { OrderStatus } from '@/src/constants/enums';
+import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
+import { useOrder } from '@/src/hooks';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function TrackOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,19 +36,19 @@ export default function TrackOrderScreen() {
     const isPreparing = status === OrderStatus.PREPARING;
     const isReady = status === OrderStatus.READY;
     const isPickedUp = status === OrderStatus.PICKED_UP;
-    
+
     // Determine active steps based on standard progression
     const pendingActive = isPending;
     const confirmedActive = isConfirmed;
     const preparingActive = isPreparing;
     const readyActive = isReady;
-    
+
     // Determine completed steps
     const confirmedCompleted = isConfirmed || isPreparing || isReady || isPickedUp;
     const preparingCompleted = isPreparing || isReady || isPickedUp;
     const readyCompleted = isReady || isPickedUp;
     const pickedUpCompleted = isPickedUp;
-    
+
     return [
       {
         id: '1',
@@ -116,10 +115,10 @@ export default function TrackOrderScreen() {
         </View>
 
       </ScrollView>
-      
+
       <View style={styles.footer}>
-        <Button 
-          title="Back to Orders" 
+        <Button
+          title="Back to Orders"
           variant="outline"
           onPress={() => router.navigate('/(tabs)/(orders)')}
           fullWidth
@@ -131,13 +130,13 @@ export default function TrackOrderScreen() {
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xl,
   },
   header: {
     paddingVertical: Spacing.xl,
   },
   title: {
-    fontSize: Typography.size.xxl,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
   },
