@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
@@ -9,6 +10,7 @@ import { useActiveSubscription, useSubscriptionPlans, usePurchaseSubscription, u
 import { formatCurrency } from '@/src/utils/formatters';
 
 export default function SubscriptionScreen() {
+  const router = useRouter();
   const user = useUser();
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plans, isLoading: isLoadingPlans } = useSubscriptionPlans();
@@ -17,17 +19,10 @@ export default function SubscriptionScreen() {
 
   const handlePurchase = (plan: any) => {
     if (!user) return;
-    Alert.alert(
-      'Confirm Purchase',
-      `Simulate purchase of ${plan.name} for ${formatCurrency(plan.price)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Purchase', 
-          onPress: () => purchaseMutation.mutate({ userId: user.id, plan })
-        }
-      ]
-    );
+    router.push({
+      pathname: '/(tabs)/(subscription)/terms',
+      params: { planId: plan.id }
+    } as any);
   };
 
   if (isLoadingSub || isLoadingPlans) {

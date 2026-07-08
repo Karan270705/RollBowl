@@ -21,6 +21,7 @@ interface OrderRow {
   total: number;
   notes: string | null;
   estimated_ready_time: string | null;
+  expected_pickup_slot: string | null;
   pickup_date: string;
   created_at: string;
   updated_at: string;
@@ -72,6 +73,7 @@ function mapOrder(orderRow: OrderRow, itemsRows: OrderItemRow[] = []): Order {
     total: Number(orderRow.total),
     notes: orderRow.notes ?? undefined,
     estimatedReadyTime: orderRow.estimated_ready_time ?? undefined,
+    expectedPickupSlot: orderRow.expected_pickup_slot ?? undefined,
     pickupDate: orderRow.pickup_date,
     createdAt: orderRow.created_at,
     updatedAt: orderRow.updated_at,
@@ -153,6 +155,7 @@ export async function placeOrder(
   tax: number,
   total: number,
   pickupDate: string,
+  expectedPickupSlot: string,
   subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
   notes?: string
 ): Promise<Order> {
@@ -175,6 +178,7 @@ export async function placeOrder(
       total,
       notes,
       pickup_date: pickupDate,
+      expected_pickup_slot: expectedPickupSlot,
     })
     .select()
     .single();

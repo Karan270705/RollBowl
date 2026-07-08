@@ -66,11 +66,22 @@ export default function OrderDetailsScreen() {
           </View>
         )}
 
-        {/* Stall Info */}
-        <Section title="Stall Details">
+        {/* Pickup Info */}
+        <Section title="Pickup Details">
           <View style={styles.stallCard}>
-            <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} style={styles.stallIcon} />
-            <Text style={styles.stallName}>{order.stallName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: order.expectedPickupSlot ? Spacing.sm : 0 }}>
+              <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} style={styles.stallIcon} />
+              <Text style={styles.stallName}>{order.stallName}</Text>
+            </View>
+            {order.expectedPickupSlot && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="time-outline" size={20} color={Colors.textSecondary} style={styles.stallIcon} />
+                <View>
+                  <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary, marginBottom: 2 }}>Expected Pickup</Text>
+                  <Text style={styles.stallName}>{order.expectedPickupSlot}</Text>
+                </View>
+              </View>
+            )}
           </View>
         </Section>
 
@@ -191,8 +202,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: Radii.md,
     padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     ...Shadows.sm,
   },
   stallIcon: {

@@ -104,7 +104,7 @@ export async function getAllSubscriptionPlans(): Promise<SubscriptionPlan[]> {
   })) as SubscriptionPlan[];
 }
 
-export async function simulatePurchase(userId: string, plan: SubscriptionPlan): Promise<void> {
+export async function simulatePurchase(userId: string, plan: SubscriptionPlan, termsVersion: string): Promise<void> {
   // First, check if there is an active subscription to prevent duplicates
   const activeSub = await getActiveSubscription(userId);
   if (activeSub) {
@@ -130,6 +130,8 @@ export async function simulatePurchase(userId: string, plan: SubscriptionPlan): 
       remaining_meals: plan.totalMeals,
       meals_per_day: plan.mealsPerDay,
       daily_credits_used: 0,
+      accepted_terms_version: termsVersion,
+      accepted_terms_at: new Date().toISOString(),
     });
 
   if (error) throw error;

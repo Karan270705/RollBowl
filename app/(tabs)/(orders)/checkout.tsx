@@ -21,6 +21,7 @@ export default function CheckoutScreen() {
   const [payment, setPayment] = useState('upi');
   const user = useUser();
   const [isPlacing, setIsPlacing] = useState(false);
+  const [pickupSlot, setPickupSlot] = useState<string>('12:00–12:30');
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
@@ -62,7 +63,7 @@ export default function CheckoutScreen() {
       
       const subUpdates = engineResult.subscriptionUpdates && subscription ? { id: subscription.id, updates: engineResult.subscriptionUpdates } : undefined;
       
-      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, subUpdates, undefined);
+      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, pickupSlot, subUpdates, undefined);
       
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
@@ -93,20 +94,23 @@ export default function CheckoutScreen() {
 
       {/* Pickup Information */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Pickup Information</Text>
-        <View style={styles.pickupRow}>
-          <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} />
-          <View>
-            <Text style={styles.pickupLabel}>Pickup Location</Text>
-            <Text style={styles.cardValue}>RollBowl Main Stall</Text>
-          </View>
-        </View>
-        <View style={[styles.pickupRow, { marginTop: Spacing.sm }]}>
-          <Ionicons name="time-outline" size={20} color={Colors.textSecondary} />
-          <View>
-            <Text style={styles.pickupLabel}>Pickup Time</Text>
-            <Text style={styles.cardValue}>Ready in approx. 15 minutes</Text>
-          </View>
+        <Text style={styles.cardTitle}>Expected Pickup Time</Text>
+        <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
+          When do you plan to collect your order tomorrow?
+        </Text>
+        <View style={styles.chipContainer}>
+          {['12:00–12:30', '12:30–1:00', '1:00–1:30', '1:30–2:00', 'Not Sure'].map((slot) => (
+            <TouchableOpacity 
+              key={slot} 
+              style={[styles.chip, pickupSlot === slot && styles.chipActive]}
+              onPress={() => setPickupSlot(slot)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, pickupSlot === slot && styles.chipTextActive]}>
+                {slot}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -229,4 +233,9 @@ const styles = StyleSheet.create({
   totalVal: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
   grandLabel: { fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   grandVal: { fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.primary },
+  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  chip: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: Radii.full, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.borderLight },
+  chipActive: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary },
+  chipText: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textSecondary },
+  chipTextActive: { color: Colors.primary, fontFamily: Typography.family.bold },
 });

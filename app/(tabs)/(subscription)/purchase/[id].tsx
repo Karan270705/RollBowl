@@ -1,24 +1,39 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
-import { MOCK_SUBSCRIPTION_PLANS } from '@/src/constants/mockData';
+import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
+import { usePurchaseSubscription, useSubscriptionPlan } from '@/src/hooks';
+import { useUser } from '@/src/store';
 import { formatCurrency } from '@/src/utils/formatters';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function SubscriptionPurchaseScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, termsVersion } = useLocalSearchParams<{ id: string; termsVersion: string }>();
   const router = useRouter();
+  const user = useUser();
   const [selectedPayment, setSelectedPayment] = useState<string>('card-1');
-  
-  const plan = MOCK_SUBSCRIPTION_PLANS.find(p => p.id === id) || MOCK_SUBSCRIPTION_PLANS[0];
+
+  const { data: plan, isLoading } = useSubscriptionPlan(id);
+  const purchaseMutation = usePurchaseSubscription();
 
   const handlePurchase = () => {
-    // In a real app, handle payment intent here
-    router.push('/(tabs)/(subscription)/success');
+    if (!user || !plan || !termsVersion) return;
+    purchaseMutation.mutate({ userId: user.id, plan, termsVersion }, {
+      onSuccess: () => {
+        router.replace('/(tabs)/(subscription)/success');
+      }
+    });
   };
+
+  if (isLoading || !plan) {
+    return (
+      <ScreenWrapper>
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: Spacing['2xl'] }} />
+      </ScreenWrapper>
+    );
+  }
 
   return (
     <ScreenWrapper>
@@ -33,15 +48,14 @@ export default function SubscriptionPurchaseScreen() {
             <View style={styles.planHeader}>
               <View>
                 <Text style={styles.planName}>{plan.name}</Text>
-                <Text style={styles.planMeals}>{plan.mealsPerWeek} meals / week</Text>
+                <Text style={styles.planMeals}>{plan.totalMeals} total credits</Text>
               </View>
               <View style={styles.planPriceContainer}>
-                <Text style={styles.planPrice}>{formatCurrency(plan.pricePerWeek)}</Text>
-                <Text style={styles.planFrequency}>/wk</Text>
+                <Text style={styles.planPrice}>{formatCurrency(plan.price)}</Text>
               </View>
             </View>
             <View style={styles.planFeatures}>
-              {plan.features.map((feature, index) => (
+              {plan.features?.map((feature, index) => (
                 <View key={index} style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
                   <Text style={styles.featureText}>{feature}</Text>
@@ -52,7 +66,7 @@ export default function SubscriptionPurchaseScreen() {
         </Section>
 
         <Section title="Payment Method">
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.paymentCard, selectedPayment === 'card-1' && styles.paymentCardSelected]}
             onPress={() => setSelectedPayment('card-1')}
             activeOpacity={0.7}
@@ -69,7 +83,7 @@ export default function SubscriptionPurchaseScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.paymentCard, selectedPayment === 'apple-pay' && styles.paymentCardSelected]}
             onPress={() => setSelectedPayment('apple-pay')}
             activeOpacity={0.7}
@@ -89,8 +103,8 @@ export default function SubscriptionPurchaseScreen() {
         <Section title="Order Summary">
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>First week payment</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(plan.pricePerWeek)}</Text>
+              <Text style={styles.summaryLabel}>Subscription total</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(plan.price)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Taxes & Fees</Text>
@@ -98,7 +112,7 @@ export default function SubscriptionPurchaseScreen() {
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total Due Today</Text>
-              <Text style={styles.totalValue}>{formatCurrency(plan.pricePerWeek + 2.5)}</Text>
+              <Text style={styles.totalValue}>{formatCurrency(plan.price + 2.5)}</Text>
             </View>
           </View>
         </Section>
@@ -109,9 +123,10 @@ export default function SubscriptionPurchaseScreen() {
         <Text style={styles.termsText}>
           By confirming, you agree to our Terms of Service and authorize recurring payments.
         </Text>
-        <Button 
-          title={`Subscribe for ${formatCurrency(plan.pricePerWeek + 2.5)}/wk`}
+        <Button
+          title={`Subscribe for ${formatCurrency(plan.price + 2.5)}`}
           onPress={handlePurchase}
+          loading={purchaseMutation.isPending}
           fullWidth
         />
       </View>
@@ -121,13 +136,13 @@ export default function SubscriptionPurchaseScreen() {
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xl,
   },
   header: {
     paddingVertical: Spacing.xl,
   },
   title: {
-    fontSize: Typography.size.xxl,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
   },

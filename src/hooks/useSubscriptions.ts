@@ -29,7 +29,7 @@ export function useSubscriptionPlans() {
 export function usePurchaseSubscription() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, plan }: { userId: string, plan: SubscriptionPlan }) => simulatePurchase(userId, plan),
+    mutationFn: ({ userId, plan, termsVersion }: { userId: string, plan: SubscriptionPlan, termsVersion: string }) => simulatePurchase(userId, plan, termsVersion),
     onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions?.active(userId) || ['subscriptions', 'active', userId] });
     },
