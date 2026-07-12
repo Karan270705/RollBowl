@@ -11,7 +11,7 @@ import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 import { placeOrder } from '@/src/services/orders';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
-import { useActiveMenu, useScheduledMeals, useActiveSubscription, useSubscriptionPlan } from '@/src/hooks';
+import { useScheduledMeals, useActiveSubscription, useSubscriptionPlan, useOperationalWindow } from '@/src/hooks';
 import { processSubscription } from '@/src/utils/subscriptionEngine';
 import { PaymentMethod } from '@/src/constants/enums';
 import { PICKUP_LOCATION } from '@/src/constants/config';
@@ -24,16 +24,14 @@ export default function CheckoutScreen() {
   const user = useUser();
   const [isPlacing, setIsPlacing] = useState(false);
   const [pickupSlot, setPickupSlot] = useState<string>('12:00–12:30');
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowDateString = tomorrow.toISOString().split('T')[0];
+  const { data: opFacts, isLoading: isLoadingOp, isError: isOpError } = useOperationalWindow();
   
-  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu, isHoliday, holiday } = useActiveMenu(tomorrowDateString);
-  const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
+  const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
 
-  const engineResult = processSubscription(items, subscription || null, plan || null, tomorrowDateString);
+  // Fallback to empty string for safety if operationalDate is null (caught in validation below)
+  const engineResult = processSubscription(items, subscription || null, plan || null, opFacts?.operationalDate || '');
   const subtotal = engineResult.newSubtotal;
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
@@ -43,8 +41,13 @@ export default function CheckoutScreen() {
     if (!user || items.length === 0) return;
     
     // Store Status Validation
-    if (!storeStatus?.isOrderingOpen) {
-      alert(storeStatus?.subtitle || 'Ordering is currently closed.');
+    if (!opFacts?.canPlaceOrders) {
+      alert('Ordering is currently closed or a holiday is declared.');
+      return;
+    }
+
+    if (!opFacts.operationalDate) {
+      alert('Cannot determine the operational date.');
       return;
     }
 
@@ -54,7 +57,7 @@ export default function CheckoutScreen() {
     );
 
     if (invalidItems.length > 0) {
-      alert(`One or more items in your cart are no longer available on ${formatFriendlyDate(tomorrowDateString)}'s menu. Please remove them to continue.`);
+      alert(`One or more items in your cart are no longer available on ${formatFriendlyDate(opFacts.operationalDate)}'s menu. Please remove them to continue.`);
       return;
     }
 
@@ -65,7 +68,7 @@ export default function CheckoutScreen() {
       
       const subUpdates = engineResult.subscriptionUpdates && subscription ? { id: subscription.id, updates: engineResult.subscriptionUpdates } : undefined;
       
-      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, tomorrowDateString, pickupSlot, payment, subUpdates, undefined);
+      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, opFacts.operationalDate, pickupSlot, payment, subUpdates, undefined);
       
       // Invalidate the orders cache so the new order shows up immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
@@ -95,14 +98,14 @@ export default function CheckoutScreen() {
       </View>
 
       {/* ─── HOLIDAY BLOCK ─────────────────────────────────────── */}
-      {isHoliday ? (
+      {opFacts?.isHoliday ? (
         <View style={styles.holidayBlock}>
           <Ionicons name="close-circle" size={48} color={Colors.error} />
-          <Text style={styles.holidayBlockTitle}>Kitchen Closed Tomorrow</Text>
-          <Text style={styles.holidayBlockDate}>{formatFriendlyDate(tomorrowDateString)}</Text>
+          <Text style={styles.holidayBlockTitle}>Kitchen Closed</Text>
+          <Text style={styles.holidayBlockDate}>{formatFriendlyDate(opFacts.operationalDate || '')}</Text>
           <View style={styles.holidayBlockCard}>
             <Text style={styles.holidayBlockLabel}>Reason</Text>
-            <Text style={styles.holidayBlockValue}>{holiday?.title || 'Public Holiday'}</Text>
+            <Text style={styles.holidayBlockValue}>{opFacts.holidayDetails?.title || 'Public Holiday'}</Text>
           </View>
           <Text style={styles.holidayBlockHint}>No orders can be placed for this date. Ordering will resume automatically the next day.</Text>
         </View>
@@ -113,7 +116,7 @@ export default function CheckoutScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Expected Pickup Time</Text>
           <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
-            When do you plan to collect your order on {formatFriendlyDate(tomorrowDateString)}?
+            When do you plan to collect your order on {formatFriendlyDate(opFacts?.operationalDate || '')}?
           </Text>
           <View style={styles.chipContainer}>
             {['12:00–12:30', '12:30–1:00', '1:00–1:30', '1:30–2:00', 'Not Sure'].map((slot) => (
@@ -240,8 +243,8 @@ export default function CheckoutScreen() {
         onPress={handlePlaceOrder} 
         fullWidth 
         size="lg" 
-        loading={isPlacing || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
-        disabled={isPlacing || items.length === 0 || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
+        loading={isPlacing || isLoadingOp || isLoadingMeals || isLoadingSub || isLoadingPlan} 
+        disabled={isPlacing || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingSub || isLoadingPlan} 
       />
       {/* ─── END NORMAL CHECKOUT CONTENT ─── */}
       </>

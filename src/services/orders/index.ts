@@ -2,7 +2,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Order, OrderItem } from '@/src/types/models';
 import { OrderStatus, OrderType, PaymentStatus } from '@/src/constants/enums';
 import { NotificationEvents } from '@/src/services/notifications';
-import { getHolidayByDate } from '@/src/services/holidays';
+import { resolveOperationalFacts } from '@/src/engine/operationalEngine';
 
 // ─── DB Row Types ────────────────────────────────────────────
 
@@ -163,9 +163,19 @@ export async function placeOrder(
   subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
   notes?: string
 ): Promise<Order> {
-  const holiday = await getHolidayByDate(pickupDate);
-  if (holiday) {
+  // SERVER-SIDE OPERATIONAL VALIDATION
+  const opFacts = await resolveOperationalFacts();
+  
+  if (opFacts.status === 'HOLIDAY') {
     throw new Error('Cannot place an order on a Kitchen Holiday.');
+  }
+
+  if (opFacts.status !== 'ORDERING_OPEN') {
+    throw new Error('Ordering is currently closed.');
+  }
+
+  if (opFacts.operationalDate !== pickupDate) {
+    throw new Error('Invalid order date. The client clock is out of sync with the kitchen operations.');
   }
 
   const orderNumber = `RB-${Math.floor(Math.random() * 900000) + 100000}`;

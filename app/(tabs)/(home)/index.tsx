@@ -2,16 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
-import { SearchBar, LoadingSpinner, EmptyState } from '@/src/components/ui';
+import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useAllMeals, useActiveMenu, useScheduledMeals } from '@/src/hooks';
+import { useAllMeals, useScheduledMeals, useOperationalWindow } from '@/src/hooks';
 import { getGreeting, formatFriendlyDate } from '@/src/utils/formatters';
-import { MenuStoreState } from '@/src/utils/menuState';
-import { Button } from '@/src/components/ui';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -20,35 +17,12 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ─── Date Strings ────────────────────────────────────────
-  const todayDate = new Date();
-  const todayDateString = todayDate.toISOString().split('T')[0];
+  // ─── Operational Engine ─────────────────────────────────────────
+  const { data: opFacts, isLoading: isLoadingOp, isError, error, refetch } = useOperationalWindow();
+  
+  const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowDateString = tomorrow.toISOString().split('T')[0];
-
-  // ─── Menu Queries ─────────────────────────────────────────
-  // useActiveMenu now waits for BOTH menu + holiday queries before settling
-  const {
-    data: activeMenu,
-    storeStatus,
-    isLoading: isLoadingMenu,
-    isError,
-    error,
-    refetch,
-    isHoliday,
-    holiday,
-    resumeDate,
-  } = useActiveMenu(tomorrowDateString);
-
-  const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
-
-  // Today's Menu (only shown during pickup window)
-  const { data: todayMenu, isLoading: isLoadingTodayMenu } = useActiveMenu(todayDateString);
-  const { data: todayMeals = [], isLoading: isLoadingTodayMeals } = useScheduledMeals(todayMenu?.id);
-
-  const isLoading = isLoadingMenu || isLoadingMeals || isLoadingTodayMenu || isLoadingTodayMeals;
+  const isLoading = isLoadingOp || isLoadingMeals;
 
   // ─── Browse Catalog ───────────────────────────────────────
   const { data: allMeals = [] } = useAllMeals();
@@ -80,7 +54,7 @@ export default function HomeScreen() {
   }
 
   // ─── Error ────────────────────────────────────────────────
-  if (isError) {
+  if (isError || !opFacts) {
     return (
       <ScreenWrapper>
         <View style={styles.header}>
@@ -91,8 +65,8 @@ export default function HomeScreen() {
         </View>
         <EmptyState
           icon="cloud-offline-outline"
-          title="Couldn't load items"
-          subtitle={error?.message ?? 'Something went wrong. Please try again.'}
+          title="Couldn't load menu"
+          subtitle={error?.message ?? 'We could not fetch the operational status.'}
           action={
             <Button title="Retry" onPress={() => refetch()} variant="primary" size="sm" />
           }
@@ -101,10 +75,35 @@ export default function HomeScreen() {
     );
   }
 
-  // ─── HOLIDAY STATE: Highest Priority ─────────────────────
-  // When tomorrow is a holiday, replace everything with the Holiday screen.
-  // Do NOT render disabled menu items. Do NOT render category chips.
-  if (isHoliday) {
+  // ─── STATUS SWITCH ─────────────────────────────────────────
+
+  // MENU COMING SOON
+  if (opFacts.status === 'MENU_COMING_SOON') {
+    return (
+      <ScreenWrapper>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+            <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+          </View>
+        </View>
+        <EmptyState
+          icon="calendar-outline"
+          title="Menu Coming Soon"
+          subtitle="The kitchen has not published the upcoming menu yet. Please check back later!"
+        />
+      </ScreenWrapper>
+    );
+  }
+
+  // HOLIDAY
+  if (opFacts.status === 'HOLIDAY') {
+    // If it's a holiday, we can safely compute resumeDate manually for UI just as an estimation (e.g. operationalDate + 1)
+    // Or we rely entirely on the fact. Let's just show standard holiday UI.
+    const d = new Date(opFacts.operationalDate);
+    d.setDate(d.getDate() + 1);
+    const resumeDate = d.toISOString().split('T')[0];
+
     return (
       <ScreenWrapper>
         {/* Header */}
@@ -118,43 +117,59 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Holiday Banner */}
-        <View style={styles.holidayBanner}>
-          <Ionicons name="close-circle" size={22} color={Colors.error} />
-          <View style={styles.statusInfo}>
-            <Text style={[styles.statusTitle, { color: Colors.error }]}>Kitchen Closed Tomorrow</Text>
-            <Text style={styles.statusSubtitle}>{storeStatus.subtitle}</Text>
-          </View>
-        </View>
-
-        {/* Holiday Empty State — full-screen, premium */}
+        {/* Holiday Empty State */}
         <View style={styles.holidayContainer}>
           <Text style={styles.holidayEmoji}>🏖</Text>
           <Text style={styles.holidayTitle}>Kitchen Closed</Text>
-          <Text style={styles.holidayDate}>{formatFriendlyDate(tomorrowDateString)}</Text>
+          <Text style={styles.holidayDate}>{formatFriendlyDate(opFacts.operationalDate)}</Text>
 
           <View style={styles.holidayCard}>
             <Text style={styles.holidayCardLabel}>Holiday</Text>
-            <Text style={styles.holidayCardValue}>{holiday?.title || 'Public Holiday'}</Text>
-            {holiday?.description ? (
-              <Text style={styles.holidayCardDesc}>{holiday.description}</Text>
+            <Text style={styles.holidayCardValue}>{opFacts.holidayDetails?.title || 'Public Holiday'}</Text>
+            {opFacts.holidayDetails?.description ? (
+              <Text style={styles.holidayCardDesc}>{opFacts.holidayDetails.description}</Text>
             ) : null}
           </View>
 
-          {resumeDate ? (
-            <View style={styles.resumeRow}>
-              <Ionicons name="checkmark-circle-outline" size={18} color={Colors.success} />
-              <Text style={styles.resumeText}>
-                Ordering will automatically resume on{' '}
-                <Text style={{ fontFamily: Typography.family.bold }}>
-                  {formatFriendlyDate(resumeDate)}
-                </Text>
+          <View style={styles.resumeRow}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.success} />
+            <Text style={styles.resumeText}>
+              Ordering will automatically resume on{' '}
+              <Text style={{ fontFamily: Typography.family.bold }}>
+                {formatFriendlyDate(resumeDate)}
               </Text>
-            </View>
-          ) : null}
+            </Text>
+          </View>
         </View>
       </ScreenWrapper>
     );
+  }
+
+  // ─── Compute Banner Status ────────────────────────────────
+  let statusTitle = '';
+  let statusSubtitle = '';
+  let statusColor = Colors.primary;
+  let statusIcon = 'time-outline' as const;
+
+  if (opFacts.status === 'ORDERING_OPEN') {
+    statusTitle = `Menu Available`;
+    statusSubtitle = `Place your order before the cutoff.`;
+    statusColor = Colors.success;
+    statusIcon = 'checkmark-circle';
+  } else if (opFacts.status === 'ORDERING_CLOSED' || opFacts.isPrepTime) {
+    statusTitle = 'Orders Closed';
+    statusSubtitle = 'We are preparing the meals. Pickup starts soon.';
+    statusColor = Colors.warning;
+    statusIcon = 'restaurant-outline';
+  } else if (opFacts.status === 'PICKUP_ACTIVE') {
+    statusTitle = 'Pickup Window Active';
+    statusSubtitle = 'Head to the stall to collect your order.';
+    statusColor = Colors.primary;
+    statusIcon = 'basket-outline';
+  } else {
+    // Catch-all
+    statusTitle = 'Kitchen Closed';
+    statusSubtitle = 'Ordering is currently closed.';
   }
 
   // ─── Normal States ────────────────────────────────────────
@@ -174,41 +189,18 @@ export default function HomeScreen() {
       {/* Store Status Banner */}
       <View style={[
         styles.statusBanner,
-        { backgroundColor: storeStatus.isOrderingOpen ? Colors.successLight : Colors.primaryBg }
+        { backgroundColor: opFacts.canPlaceOrders ? Colors.successLight : Colors.primaryBg }
       ]}>
-        <Ionicons
-          name={storeStatus.isOrderingOpen ? 'checkmark-circle' : 'time-outline'}
-          size={24}
-          color={storeStatus.isOrderingOpen ? Colors.success : Colors.primary}
-        />
+        <Ionicons name={statusIcon} size={24} color={statusColor} />
         <View style={styles.statusInfo}>
-          <Text style={[styles.statusTitle, { color: storeStatus.isOrderingOpen ? Colors.success : Colors.primary }]}>
-            {storeStatus.title}
-          </Text>
-          <Text style={styles.statusSubtitle}>{storeStatus.subtitle}</Text>
+          <Text style={[styles.statusTitle, { color: statusColor }]}>{statusTitle}</Text>
+          <Text style={styles.statusSubtitle}>{statusSubtitle}</Text>
         </View>
       </View>
 
-      {/* ─── Section: Today's Menu (Pickup Window Only) ─── */}
-      {storeStatus.state === MenuStoreState.PICKUP_ACTIVE && todayMeals.length > 0 && (
-        <Section title={`Today's Menu (${formatFriendlyDate(todayDateString)})`}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
-            {todayMeals.map((meal) => (
-              <MealCard
-                key={`today-${meal.id}`}
-                meal={meal}
-                prominent
-                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                isOrderable={false}
-              />
-            ))}
-          </ScrollView>
-        </Section>
-      )}
-
-      {/* ─── Section: Tomorrow's Menu ─── */}
+      {/* ─── Section: Operational Menu ─── */}
       {availableMeals.length > 0 && (
-        <Section title={`Tomorrow's Menu (${formatFriendlyDate(tomorrowDateString)})`}>
+        <Section title={`Menu for ${formatFriendlyDate(opFacts.operationalDate)}`}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
             {availableMeals.map((meal) => (
               <MealCard
@@ -216,8 +208,8 @@ export default function HomeScreen() {
                 meal={meal}
                 prominent
                 onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                onAddToCart={storeStatus.isOrderingOpen ? () => addItem(meal, 1) : undefined}
-                isOrderable={storeStatus.isOrderingOpen}
+                onAddToCart={opFacts.canPlaceOrders ? () => addItem(meal, 1) : undefined}
+                isOrderable={opFacts.canPlaceOrders}
               />
             ))}
           </ScrollView>
@@ -241,7 +233,7 @@ export default function HomeScreen() {
         ) : (
           filteredCatalog.map((meal) => {
             const isScheduled = availableMeals.some(m => m.id === meal.id);
-            const isOrderable = storeStatus.isOrderingOpen && isScheduled;
+            const isOrderable = opFacts.canPlaceOrders && isScheduled;
             return (
               <MealCard
                 key={meal.id}
@@ -266,22 +258,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: Typography.size.sm, color: Colors.textSecondary, fontFamily: Typography.family.regular },
   userName: { fontSize: Typography.size.xl, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   notifButton: { position: 'relative', padding: Spacing.sm },
-  subBanner: { borderRadius: Radii.lg, overflow: 'hidden', marginVertical: Spacing.base, ...Shadows.md },
-  subGradient: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: Spacing.base,
-  },
-  subInfo: { flex: 1 },
-  subTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.white },
-  subDetail: { fontSize: Typography.size.sm, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   statusBanner: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     padding: Spacing.base, borderRadius: Radii.lg, marginBottom: Spacing.base,
-  },
-  holidayBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    padding: Spacing.base, borderRadius: Radii.lg, marginBottom: Spacing.base,
-    backgroundColor: Colors.error + '15',
   },
   statusInfo: { flex: 1 },
   statusTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold },
