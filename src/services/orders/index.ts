@@ -2,6 +2,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Order, OrderItem } from '@/src/types/models';
 import { OrderStatus, OrderType, PaymentStatus } from '@/src/constants/enums';
 import { NotificationEvents } from '@/src/services/notifications';
+import { getHolidayByDate } from '@/src/services/holidays';
 
 // ─── DB Row Types ────────────────────────────────────────────
 
@@ -162,6 +163,11 @@ export async function placeOrder(
   subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
   notes?: string
 ): Promise<Order> {
+  const holiday = await getHolidayByDate(pickupDate);
+  if (holiday) {
+    throw new Error('Cannot place an order on a Kitchen Holiday.');
+  }
+
   const orderNumber = `RB-${Math.floor(Math.random() * 900000) + 100000}`;
   
   const { data: orderData, error: orderError } = await supabase

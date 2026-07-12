@@ -7,6 +7,7 @@ export enum MenuStoreState {
   ORDERS_CLOSED = 'ORDERS_CLOSED',     // Ordering closed, prep time
   PICKUP_ACTIVE = 'PICKUP_ACTIVE',     // Pickup window is active
   KITCHEN_CLOSED = 'KITCHEN_CLOSED',   // After pickup, before next menu opens
+  HOLIDAY = 'HOLIDAY',                 // Kitchen closed for holiday
   NO_MENU = 'NO_MENU',                 // No published menu exists
 }
 
@@ -27,7 +28,21 @@ function setTimeOnDate(date: Date, timeStr: string): Date {
   return newDate;
 }
 
-export function getMenuState(activeMenu: MenuSchedule | null | undefined): StoreStatus {
+export function getMenuState(
+  activeMenu: MenuSchedule | null | undefined,
+  isHoliday: boolean = false,
+  holidayTitle: string = '',
+  resumeDate: string = ''
+): StoreStatus {
+  if (isHoliday) {
+    return {
+      state: MenuStoreState.HOLIDAY,
+      title: 'Kitchen Closed Tomorrow',
+      subtitle: holidayTitle ? `Closed for: ${holidayTitle}` : 'Kitchen is closed for a holiday.',
+      isOrderingOpen: false,
+    };
+  }
+
   if (!activeMenu) {
     return {
       state: MenuStoreState.NO_MENU,

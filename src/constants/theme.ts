@@ -36,6 +36,7 @@ export const Colors = {
 
   info: '#1565C0',
   infoLight: '#E3F2FD',
+  infoDark: '#0D47A1',
 
   // Neutrals
   white: '#FFFFFF',

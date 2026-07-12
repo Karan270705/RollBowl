@@ -10,7 +10,7 @@ export const AppConfig = {
 
   // API Configuration
   API_BASE_URL: __DEV__ ? 'http://localhost:3000/api' : 'https://api.rollbowl.in/api',
-  USE_MOCK: true, // Set to false when backend is ready
+  USE_MOCK: false, // Set to false when backend is ready
 
   // Timing
   MOCK_DELAY_MIN: 300,

@@ -7,7 +7,7 @@ import { Button } from '@/src/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@/src/store';
 import { useActiveSubscription, useSubscriptionPlans, usePurchaseSubscription, useSubscriptionUsageHistory } from '@/src/hooks';
-import { formatCurrency } from '@/src/utils/formatters';
+import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
@@ -65,6 +65,40 @@ export default function SubscriptionScreen() {
               </View>
             )}
 
+            {subscription.extendedDays > 0 && (() => {
+              // Compute original expiry date (end_date minus extended_days)
+              const newExpiry = new Date(subscription.endDate);
+              const originalExpiry = new Date(subscription.endDate);
+              originalExpiry.setDate(originalExpiry.getDate() - subscription.extendedDays);
+              return (
+                <View style={[styles.expiryMessage, { backgroundColor: Colors.infoLight, marginTop: Spacing.sm }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm }}>
+                    <Ionicons name="calendar" size={20} color={Colors.infoDark} />
+                    <Text style={[styles.expiryText, { color: Colors.infoDark, fontFamily: Typography.family.bold }]}>
+                      Subscription Extended
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
+                    <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Original Expiry</Text>
+                    <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.medium, color: Colors.textPrimary }}>
+                      {formatFriendlyDate(originalExpiry.toISOString().split('T')[0])}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.sm }}>
+                    <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>New Expiry</Text>
+                    <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.infoDark }}>
+                      {formatFriendlyDate(newExpiry.toISOString().split('T')[0])}
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: Colors.infoDark + '15', borderRadius: Radii.sm, padding: Spacing.sm }}>
+                    <Text style={{ fontSize: Typography.size.xs, color: Colors.infoDark, fontFamily: Typography.family.semiBold, lineHeight: 18 }}>
+                      Your subscription validity has been automatically extended by {subscription.extendedDays} day{subscription.extendedDays > 1 ? 's' : ''} due to Kitchen Holidays.
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
             <View style={styles.progressContainer}>
               <View style={styles.progressRow}>
                 <Text style={styles.progressLabel}>Credits Consumed</Text>
@@ -93,11 +127,11 @@ export default function SubscriptionScreen() {
             <View style={styles.datesBox}>
               <View style={styles.dateRow}>
                 <Ionicons name="calendar-outline" size={16} color={Colors.textSecondary} />
-                <Text style={styles.dateText}>Started: {new Date(subscription.startDate).toLocaleDateString()}</Text>
+                <Text style={styles.dateText}>Started: {formatFriendlyDate(subscription.startDate)}</Text>
               </View>
               <View style={styles.dateRow}>
                 <Ionicons name="time-outline" size={16} color={Colors.error} />
-                <Text style={styles.dateText}>Expires: {new Date(subscription.endDate).toLocaleDateString()}</Text>
+                <Text style={styles.dateText}>Expires: {formatFriendlyDate(subscription.endDate)}</Text>
               </View>
             </View>
 

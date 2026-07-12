@@ -1,6 +1,7 @@
 import { supabase } from '@/src/lib/supabase';
 import { NotificationType } from '@/src/constants/enums';
 import { Notification } from '@/src/types/models';
+import { getHolidayByDate } from '@/src/services/holidays';
 
 export interface CreateNotificationParams {
   userId: string;
@@ -120,6 +121,18 @@ export const NotificationEvents = {
 
   // Menu
   notifyMenuPublished: async (userId: string, date: string) => {
+    const holiday = await getHolidayByDate(date);
+    
+    if (holiday) {
+      return createNotification({
+        userId,
+        type: NotificationType.SYSTEM,
+        title: 'Kitchen Closed Tomorrow',
+        body: `The kitchen will be closed tomorrow for ${holiday.title || 'a holiday'}. Enjoy your day off!`,
+        data: { date }
+      });
+    }
+
     return createNotification({
       userId,
       type: NotificationType.SYSTEM,

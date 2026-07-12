@@ -7,7 +7,7 @@ import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
 import { useCartStore, useUser } from '@/src/store';
-import { formatCurrency } from '@/src/utils/formatters';
+import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 import { placeOrder } from '@/src/services/orders';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
@@ -28,7 +28,7 @@ export default function CheckoutScreen() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
   
-  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu, isHoliday, holiday } = useActiveMenu(tomorrowDateString);
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
@@ -54,7 +54,7 @@ export default function CheckoutScreen() {
     );
 
     if (invalidItems.length > 0) {
-      alert('One or more items in your cart are no longer available on tomorrow\'s menu. Please remove them to continue.');
+      alert(`One or more items in your cart are no longer available on ${formatFriendlyDate(tomorrowDateString)}'s menu. Please remove them to continue.`);
       return;
     }
 
@@ -94,14 +94,29 @@ export default function CheckoutScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Pickup Information */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Expected Pickup Time</Text>
-        <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
-          When do you plan to collect your order tomorrow?
-        </Text>
-        <View style={styles.chipContainer}>
-          {['12:00–12:30', '12:30–1:00', '1:00–1:30', '1:30–2:00', 'Not Sure'].map((slot) => (
+      {/* ─── HOLIDAY BLOCK ─────────────────────────────────────── */}
+      {isHoliday ? (
+        <View style={styles.holidayBlock}>
+          <Ionicons name="close-circle" size={48} color={Colors.error} />
+          <Text style={styles.holidayBlockTitle}>Kitchen Closed Tomorrow</Text>
+          <Text style={styles.holidayBlockDate}>{formatFriendlyDate(tomorrowDateString)}</Text>
+          <View style={styles.holidayBlockCard}>
+            <Text style={styles.holidayBlockLabel}>Reason</Text>
+            <Text style={styles.holidayBlockValue}>{holiday?.title || 'Public Holiday'}</Text>
+          </View>
+          <Text style={styles.holidayBlockHint}>No orders can be placed for this date. Ordering will resume automatically the next day.</Text>
+        </View>
+      ) : (
+        <>
+
+        {/* Pickup Information */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Expected Pickup Time</Text>
+          <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
+            When do you plan to collect your order on {formatFriendlyDate(tomorrowDateString)}?
+          </Text>
+          <View style={styles.chipContainer}>
+            {['12:00–12:30', '12:30–1:00', '1:00–1:30', '1:30–2:00', 'Not Sure'].map((slot) => (
             <TouchableOpacity 
               key={slot} 
               style={[styles.chip, pickupSlot === slot && styles.chipActive]}
@@ -228,6 +243,9 @@ export default function CheckoutScreen() {
         loading={isPlacing || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
         disabled={isPlacing || items.length === 0 || isLoadingMenu || isLoadingMeals || isLoadingSub || isLoadingPlan} 
       />
+      {/* ─── END NORMAL CHECKOUT CONTENT ─── */}
+      </>
+      )}
     </ScreenWrapper>
   );
 }
@@ -258,4 +276,35 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary },
   chipText: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textSecondary },
   chipTextActive: { color: Colors.primary, fontFamily: Typography.family.bold },
+  // Holiday block
+  holidayBlock: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: Spacing.xl, paddingBottom: Spacing['3xl'],
+  },
+  holidayBlockTitle: {
+    fontSize: Typography.size.xl, fontFamily: Typography.family.bold,
+    color: Colors.textPrimary, marginTop: Spacing.lg, marginBottom: Spacing.xs, textAlign: 'center',
+  },
+  holidayBlockDate: {
+    fontSize: Typography.size.base, color: Colors.textSecondary,
+    fontFamily: Typography.family.medium, marginBottom: Spacing.xl, textAlign: 'center',
+  },
+  holidayBlockCard: {
+    width: '100%', backgroundColor: Colors.errorLight, borderRadius: Radii.xl,
+    padding: Spacing.lg, marginBottom: Spacing.xl,
+    borderWidth: 1, borderColor: Colors.error + '30',
+  },
+  holidayBlockLabel: {
+    fontSize: Typography.size.xs, color: Colors.error,
+    fontFamily: Typography.family.semiBold, textTransform: 'uppercase',
+    letterSpacing: 0.8, marginBottom: Spacing.xs,
+  },
+  holidayBlockValue: {
+    fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+  },
+  holidayBlockHint: {
+    fontSize: Typography.size.sm, color: Colors.textSecondary,
+    textAlign: 'center', lineHeight: 20, fontFamily: Typography.family.medium,
+  },
 });
+

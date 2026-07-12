@@ -177,6 +177,7 @@ export interface Subscription {
   status: SubscriptionStatus;
   startDate: string;
   endDate: string;
+  extendedDays: number;
   totalMeals: number;
   consumedMeals: number;
   remainingMeals: number;
@@ -267,6 +268,18 @@ export interface MealReservation {
   quantity: number;
   pickupTime: string;
   status: 'pending' | 'confirmed' | 'collected' | 'cancelled';
+  createdAt: string;
+}
+
+// ─── Kitchen Holiday ────────────────────────────────────────
+
+export interface KitchenHoliday {
+  id: string;
+  stallId: string;
+  holidayDate: string; // YYYY-MM-DD
+  title: string;
+  description: string;
+  isActive: boolean;
   createdAt: string;
 }
 

@@ -3,7 +3,7 @@ import { Button, LoadingSpinner, StatusBadge } from '@/src/components/ui';
 import { OrderStatus, PaymentMethodLabels, PaymentStatus } from '@/src/constants/enums';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
 import { useOrder } from '@/src/hooks';
-import { formatCurrency, formatRelativeTime } from '@/src/utils/formatters';
+import { formatCurrency, formatRelativeTime, formatFriendlyDate } from '@/src/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
@@ -78,7 +78,7 @@ export default function OrderDetailsScreen() {
                 <Ionicons name="time-outline" size={20} color={Colors.textSecondary} style={styles.stallIcon} />
                 <View>
                   <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary, marginBottom: 2 }}>Expected Pickup</Text>
-                  <Text style={styles.stallName}>{order.expectedPickupSlot}</Text>
+                  <Text style={styles.stallName}>{formatFriendlyDate(order.pickupDate)} • {order.expectedPickupSlot}</Text>
                 </View>
               </View>
             )}

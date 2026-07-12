@@ -6,8 +6,8 @@ import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/the
 import { Button, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
 import { useMeal, useActiveMenu, useScheduledMeals } from '@/src/hooks';
-import { useCartStore } from '@/src/store';
-import { formatCurrency } from '@/src/utils/formatters';
+import { useCartStore, useUser } from '@/src/store';
+import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 import { MealType } from '@/src/constants/enums';
 
 export default function MealDetailScreen() {
@@ -20,7 +20,7 @@ export default function MealDetailScreen() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDateString = tomorrow.toISOString().split('T')[0];
-  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu } = useActiveMenu(tomorrowDateString);
+  const { data: activeMenu, storeStatus, isLoading: isLoadingMenu, isHoliday, holiday } = useActiveMenu(tomorrowDateString);
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(activeMenu?.id);
 
   if (isLoading || isLoadingMenu || isLoadingMeals) {
@@ -100,10 +100,14 @@ export default function MealDetailScreen() {
 
           {/* Unavailable banner */}
           {!isOrderable && (
-            <View style={styles.unavailableBanner}>
-              <Ionicons name="time-outline" size={18} color={Colors.error} />
+            <View style={[styles.unavailableBanner, isHoliday && { backgroundColor: Colors.error + '15' }]}>
+              <Ionicons name={isHoliday ? 'close-circle' : 'time-outline'} size={18} color={Colors.error} />
               <Text style={styles.unavailableBannerText}>
-                {!isScheduled ? "Not available for tomorrow's menu" : storeStatus?.subtitle || "Ordering is currently closed"}
+                {isHoliday
+                  ? `Kitchen closed for: ${holiday?.title || 'a holiday'}`
+                  : !isScheduled
+                  ? `Not available for ${formatFriendlyDate(tomorrowDateString)}`
+                  : storeStatus?.subtitle || 'Ordering is currently closed'}
               </Text>
             </View>
           )}
@@ -151,11 +155,18 @@ export default function MealDetailScreen() {
             leftIcon={<Ionicons name="cart-outline" size={18} color={Colors.white} />}
           />
         </View>
+      ) : isHoliday ? (
+        <View style={styles.bottomBarDisabled}>
+          <Ionicons name="close-circle-outline" size={22} color={Colors.error} />
+          <Text style={[styles.disabledText, { color: Colors.error }]}>
+            Kitchen Closed Tomorrow — {holiday?.title || 'Holiday'}
+          </Text>
+        </View>
       ) : (
         <View style={styles.bottomBarDisabled}>
           <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
           <Text style={styles.disabledText}>
-            {!isScheduled ? "This item is not available for tomorrow" : "Ordering is closed"}
+            {!isScheduled ? `This item is not available for ${formatFriendlyDate(tomorrowDateString)}` : 'Ordering is closed'}
           </Text>
         </View>
       )}

@@ -6,6 +6,8 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 
+import { formatFriendlyDate } from '@/src/utils/formatters';
+
 const { width } = Dimensions.get('window');
 
 export default function ReservationSuccessScreen() {
@@ -32,7 +34,7 @@ export default function ReservationSuccessScreen() {
         <View style={styles.infoBox}>
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={20} color={Colors.textSecondary} />
-            <Text style={styles.infoText}>Valid for today only</Text>
+            <Text style={styles.infoText}>Valid for {formatFriendlyDate(new Date())} only</Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={20} color={Colors.textSecondary} />

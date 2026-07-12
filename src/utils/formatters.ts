@@ -12,6 +12,31 @@ export const formatDate = (dateStr: string): string => {
   });
 };
 
+export const formatFriendlyDate = (dateStr: string | Date): string => {
+  const targetDate = new Date(dateStr);
+  targetDate.setHours(0, 0, 0, 0);
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const formatted = targetDate.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  });
+  
+  if (targetDate.getTime() === today.getTime()) {
+    return `${formatted} (Today)`;
+  } else if (targetDate.getTime() === tomorrow.getTime()) {
+    return `${formatted} (Tomorrow)`;
+  }
+  
+  return formatted;
+};
+
 export const formatTime = (dateStr: string): string => {
   return new Date(dateStr).toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit',
