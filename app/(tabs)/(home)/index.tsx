@@ -148,8 +148,8 @@ export default function HomeScreen() {
   // ─── Compute Banner Status ────────────────────────────────
   let statusTitle = '';
   let statusSubtitle = '';
-  let statusColor = Colors.primary;
-  let statusIcon = 'time-outline' as const;
+  let statusColor: string = Colors.primary;
+  let statusIcon: React.ComponentProps<typeof Ionicons>['name'] = 'time-outline';
 
   if (opFacts.status === 'ORDERING_OPEN') {
     statusTitle = `Menu Available`;

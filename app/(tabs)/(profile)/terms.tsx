@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   content: {
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing['2xl'],
   },
   lastUpdated: {
     fontSize: Typography.size.sm,

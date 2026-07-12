@@ -5,11 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
-import { MOCK_PLANS } from '@/src/constants/mockData';
+import { useSubscriptionPlans } from '@/src/hooks';
 import { formatCurrency } from '@/src/utils/formatters';
 
 export default function PlansScreen() {
   const router = useRouter();
+  const { data: plans, isLoading, error, refetch } = useSubscriptionPlans();
+
   return (
     <ScreenWrapper>
       <View style={styles.header}>
@@ -18,7 +20,21 @@ export default function PlansScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {MOCK_PLANS.map((plan) => (
+      {isLoading ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.loadingText}>Loading plans...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>Failed to load plans</Text>
+          <Button title="Retry" onPress={() => refetch()} variant="outline" />
+        </View>
+      ) : !plans || plans.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>No active plans available</Text>
+        </View>
+      ) : (
+        plans.map((plan) => (
         <View key={plan.id} style={[styles.planCard, plan.isPopular && styles.popularCard]}>
           {plan.badge && <View style={styles.badge}><Text style={styles.badgeText}>{plan.badge}</Text></View>}
           <Text style={styles.planName}>{plan.name}</Text>
@@ -39,7 +55,7 @@ export default function PlansScreen() {
             fullWidth 
           />
         </View>
-      ))}
+      )))}
     </ScreenWrapper>
   );
 }
@@ -58,4 +74,8 @@ const styles = StyleSheet.create({
   features: { marginVertical: Spacing.base, gap: Spacing.sm },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   featureText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+  loadingText: { fontSize: Typography.size.base, color: Colors.textSecondary, fontFamily: Typography.family.medium },
+  errorText: { fontSize: Typography.size.base, color: Colors.error, marginBottom: Spacing.md, fontFamily: Typography.family.medium },
+  emptyText: { fontSize: Typography.size.base, color: Colors.textSecondary, fontFamily: Typography.family.medium },
 });

@@ -110,45 +110,22 @@ export async function simulatePurchase(userId: string, plan: SubscriptionPlan, t
   if (activeSub) {
     throw new Error('You already have an active subscription.');
   }
-
-  // Insert a new active subscription for this user
-  const startDateStr = new Date().toISOString().split('T')[0];
   
   // We need to pass the stall ID. Assuming primary stall for now as in the rest of the app.
   const stallId = '57a11000-0000-0000-0000-000000000001'; // Default stall ID, or fetch dynamically
 
-  // 1. Calculate deterministic expiry via RPC
-  const { data: calcData, error: calcError } = await supabase.rpc('calculate_subscription_expiry', {
-    p_start_date: startDateStr,
-    p_duration_days: plan.durationDays,
-    p_stall_id: stallId
+  // Atomic creation via RPC
+  const { data, error } = await supabase.rpc('purchase_subscription', {
+    p_user_id: userId,
+    p_plan_id: plan.id,
+    p_stall_id: stallId,
+    p_terms_version: termsVersion
   });
 
-  if (calcError) throw calcError;
-  if (!calcData || calcData.length === 0) throw new Error('Failed to calculate subscription expiry.');
-
-  const { new_end_date, extended_days } = calcData[0];
-
-  const { error } = await supabase
-    .from('subscriptions')
-    .insert({
-      user_id: userId,
-      plan_id: plan.id,
-      plan_name: plan.name,
-      status: 'active',
-      start_date: startDateStr,
-      end_date: new_end_date,
-      extended_days: extended_days,
-      total_meals: plan.totalMeals,
-      consumed_meals: 0,
-      remaining_meals: plan.totalMeals,
-      meals_per_day: plan.mealsPerDay,
-      daily_credits_used: 0,
-      accepted_terms_version: termsVersion,
-      accepted_terms_at: new Date().toISOString(),
-    });
-
-  if (error) throw error;
+  if (error) {
+    console.error('purchase_subscription RPC error:', error);
+    throw new Error(error.message || 'Failed to complete subscription purchase.');
+  }
 
   await NotificationEvents.notifySubscriptionActivated(userId, plan.name);
 }
