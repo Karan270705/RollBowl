@@ -22,9 +22,7 @@ export const signUp = async ({ name, email, phone, password }: SignupRequest) =>
       },
     },
   });
-  console.log('SIGNUP USER', data.user);
-  console.log('SIGNUP SESSION', data.session);
-  console.log('SIGNUP ERROR', error);
+
   if (error) throw error;
   
   if (data.user) {
@@ -41,18 +39,10 @@ export const signOut = async () => {
 
 export const resetPassword = async (email: string) => {
   const redirectUrl = Linking.createURL('reset-password');
-  console.log('\n======== PASSWORD RECOVERY TRACE ========');
-  console.log('1. INITIATING RESET PASSWORD');
-  console.log('Target Email:', email);
-  console.log('Redirect URL Sent:', redirectUrl);
 
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: redirectUrl,
   });
-
-  console.log('Supabase resetPasswordForEmail Error:', error ? error.message : 'None (Success)');
-  console.log('Supabase Return Data:', data);
-  console.log('=========================================\n');
 
   if (error) throw error;
 };

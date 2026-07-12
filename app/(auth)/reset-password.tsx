@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useRouter, usePathname, useSegments, useLocalSearchParams } from 'expo-router';
-import { useRoute } from '@react-navigation/native';
-import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing } from '@/src/constants/theme';
 import { Button, Input } from '@/src/components/ui';
 import { ScreenWrapper } from '@/src/components/layout';
@@ -10,13 +8,8 @@ import { supabase } from '@/src/lib/supabase';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const url = Linking.useURL();
-  const pathname = usePathname();
-  const segments = useSegments();
-  const searchParams = useLocalSearchParams();
-  const route = useRoute();
   
-  const [sessionSet, setSessionSet] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const [password, setPassword] = useState('');
@@ -24,82 +17,30 @@ export default function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // ── Check for an existing recovery session ──────────────────
+  // The AuthDeepLinkProvider has already established the session
+  // before navigating here. This screen only needs to verify it.
   useEffect(() => {
-    Linking.getInitialURL().then(initial => {
-      console.log('\n===== DEEP LINK DIAGNOSTICS =====');
-      console.log('Initial URL:', initial);
-      console.log('Live URL:', url);
-      console.log('Pathname:', pathname);
-      console.log('Segments:', JSON.stringify(segments));
-      console.log('Search Params:', JSON.stringify(searchParams));
-      console.log('Route Object:', JSON.stringify(route));
-      console.log('===============================\n');
-    });
-    
-    // Check if session was already set manually via fallback
-    supabase.auth.getSession().then(({ data }) => {
-      console.log('Initial getSession() Check:', data.session ? `Found user ${data.session.user.id}` : 'No session');
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
       if (data.session) {
-        setSessionSet(true);
+        setSessionReady(true);
+      }
+    };
+    checkSession();
+
+    // Also listen for session changes in case the deep link handler
+    // sets the session slightly after this screen mounts.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+        setSessionReady(true);
       }
     });
 
-    if (url) {
-      try {
-        const urlObj = new URL(url);
-        const fragment = url.includes('#') ? url.split('#')[1] : null;
-        console.log('Parsed fragment:', fragment);
-        
-        if (fragment) {
-          const params = new URLSearchParams(fragment);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-          const type = params.get('type');
-
-          console.log('Tokens Found:');
-          console.log('  type:', type);
-          console.log('  access_token present:', !!accessToken, accessToken ? `(starts with ${accessToken.substring(0, 10)})` : '');
-          console.log('  refresh_token present:', !!refreshToken, refreshToken ? `(starts with ${refreshToken.substring(0, 10)})` : '');
-
-          if (accessToken && refreshToken) {
-             console.log('Executing setSession()...');
-             supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            }).then(async ({ data, error }) => {
-              console.log('setSession result:');
-              console.log('  success:', !error);
-              console.log('  error:', error?.message || 'None');
-              
-              if (!error) {
-                // Immediately test getSession
-                const sessionCheck = await supabase.auth.getSession();
-                console.log('Current Session (immediately after setSession):');
-                console.log('  user id:', sessionCheck.data.session?.user?.id || 'NULL');
-                console.log('  expires:', sessionCheck.data.session?.expires_at);
-                console.log('  access token exists?', !!sessionCheck.data.session?.access_token);
-              }
-              
-              if (error) {
-                setErrorMsg('Recovery link expired or invalid.');
-              } else {
-                setSessionSet(true);
-              }
-            });
-          } else {
-             console.log('Error: Invalid recovery link format');
-             setErrorMsg('Invalid recovery link format.');
-          }
-        } else {
-           console.log('Error: Missing recovery tokens in link (no fragment)');
-           setErrorMsg('Missing recovery tokens in link.');
-        }
-      } catch (err) {
-        console.log('Error parsing URL:', err);
-        setErrorMsg('Failed to parse recovery link.');
-      }
-    }
-  }, [url]);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleUpdatePassword = async () => {
     if (!password || password.length < 6) {
@@ -114,44 +55,20 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      console.log('Executing updateUser() for password reset...');
-      
-      // Grab email before update to test sign in later
-      const currentSession = await supabase.auth.getSession();
-      const testEmail = currentSession.data.session?.user?.email;
-      
-      const { data, error } = await supabase.auth.updateUser({ password });
-      
-      console.log('updateUser result:');
-      console.log('  success:', !error);
-      console.log('  error:', error?.message || 'None');
-      console.log('  returned user:', data?.user?.id || 'NULL');
-      
+      const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      
-      // Test signInWithPassword as requested
-      console.log('Executing signInWithPassword test...');
-      if (testEmail) {
-        const signinTest = await supabase.auth.signInWithPassword({
-          email: testEmail,
-          password: password
-        });
-        console.log('signInWithPassword test result:');
-        console.log('  success:', !signinTest.error);
-        console.log('  error:', signinTest.error?.message || 'None');
-      } else {
-        console.log('signInWithPassword test skipped: no email found in session.');
-      }
-      
-      console.log('==================================================\n');
-      
       setSuccess(true);
     } catch (err: any) {
-      console.log('updateUser exception:', err);
       setErrorMsg(err.message || 'Failed to update password.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoToLogin = async () => {
+    // Sign out of the recovery session before navigating to login
+    await supabase.auth.signOut();
+    router.replace('/(auth)/login');
   };
 
   return (
@@ -161,15 +78,15 @@ export default function ResetPasswordScreen() {
         
         {success ? (
           <>
-            <Text style={styles.subtitle}>Your password has been successfully updated.</Text>
-            <Button title="Go to Login" onPress={() => router.replace('/(auth)/login')} fullWidth size="lg" />
+            <Text style={styles.subtitle}>
+              Your password has been successfully updated. You can now log in with your new password.
+            </Text>
+            <Button title="Go to Login" onPress={handleGoToLogin} fullWidth size="lg" />
           </>
         ) : (
           <>
             <Text style={styles.subtitle}>
-              {!sessionSet && !url ? 'Waiting for recovery link...' : 
-               !sessionSet && !errorMsg ? 'Authenticating...' : 
-               'Enter your new password below.'}
+              {!sessionReady ? 'Authenticating recovery session...' : 'Enter your new password below.'}
             </Text>
             
             <Input 
@@ -179,7 +96,7 @@ export default function ResetPasswordScreen() {
               onChangeText={setPassword} 
               secureTextEntry 
               leftIcon="lock-closed-outline" 
-              editable={sessionSet && !loading}
+              editable={sessionReady && !loading}
             />
             <Input 
               label="Confirm Password" 
@@ -188,7 +105,7 @@ export default function ResetPasswordScreen() {
               onChangeText={setConfirmPassword} 
               secureTextEntry 
               leftIcon="lock-closed-outline" 
-              editable={sessionSet && !loading}
+              editable={sessionReady && !loading}
             />
             
             {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
@@ -197,7 +114,7 @@ export default function ResetPasswordScreen() {
               title="Update Password" 
               onPress={handleUpdatePassword} 
               loading={loading} 
-              disabled={!sessionSet || loading}
+              disabled={!sessionReady || loading}
               fullWidth 
               size="lg" 
               style={{ marginTop: Spacing.sm }}

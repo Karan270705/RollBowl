@@ -40,14 +40,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('\n======== AUTH STATE CHANGE EVENT ========');
-      console.log('EVENT:', event);
-      console.log('SESSION EXISTS?', !!session);
-      if (session) {
-        console.log('USER ID:', session.user?.id);
-        console.log('ACCESS TOKEN:', session.access_token ? `Starts with ${session.access_token.substring(0, 10)}` : 'NULL');
-      }
-      console.log('=========================================\n');
       if (session) {
         try {
           const user = await fetchUserProfile(session.user.id);
