@@ -41,15 +41,18 @@ export const signOut = async () => {
 
 export const resetPassword = async (email: string) => {
   const redirectUrl = Linking.createURL('reset-password');
-  console.log('\n--- RESET PASSWORD AUDIT ---');
-  console.log('1. EXACT REDIRECT URL SENT:', redirectUrl);
+  console.log('\n======== PASSWORD RECOVERY TRACE ========');
+  console.log('1. INITIATING RESET PASSWORD');
+  console.log('Target Email:', email);
+  console.log('Redirect URL Sent:', redirectUrl);
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: redirectUrl,
   });
 
-  console.log('2. SUPABASE ERROR RETURNED:', error ? error.message : 'None (Success)');
-  console.log('----------------------------\n');
+  console.log('Supabase resetPasswordForEmail Error:', error ? error.message : 'None (Success)');
+  console.log('Supabase Return Data:', data);
+  console.log('=========================================\n');
 
   if (error) throw error;
 };
