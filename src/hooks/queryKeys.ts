@@ -24,6 +24,9 @@ export const queryKeys = {
     plans: () => ['subscriptions', 'plans'] as const,
     history: (subscriptionId: string | undefined) => ['subscriptions', 'history', subscriptionId] as const,
   },
+  inventory: {
+    stall: (stallId: string, date: string) => ['inventory', stallId, date] as const,
+  },
   holidays: {
     all: () => ['holidays', 'all'] as const,
     active: (dateString: string) => ['holidays', 'active', dateString] as const,

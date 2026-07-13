@@ -150,17 +150,12 @@ export async function fetchOrderById(id: string): Promise<Order> {
  */
 export async function placeOrder(
   userId: string,
-  customerName: string,
   stallId: string,
-  stallName: string,
   items: import('@/src/utils/subscriptionEngine').ProcessedItem[],
-  subtotal: number,
-  tax: number,
-  total: number,
   pickupDate: string,
   expectedPickupSlot: string,
   paymentMethod: import('@/src/constants/enums').PaymentMethod,
-  subscriptionUpdates?: { id: string; updates: { lastUsageDate: string; dailyCreditsUsed: number; consumedMeals: number; remainingMeals: number } },
+  subscriptionId?: string,
   notes?: string
 ): Promise<Order> {
   // SERVER-SIDE OPERATIONAL VALIDATION
@@ -178,69 +173,44 @@ export async function placeOrder(
     throw new Error('Invalid order date. The client clock is out of sync with the kitchen operations.');
   }
 
-  const orderNumber = `RB-${Math.floor(Math.random() * 900000) + 100000}`;
-  
-  const { data: orderData, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      order_number: orderNumber,
-      user_id: userId,
-      customer_name: customerName,
-      stall_id: stallId,
-      stall_name: stallName,
-      status: OrderStatus.PENDING,
-      order_type: OrderType.ON_STALL,
-      payment_status: paymentMethod === 'cash' ? PaymentStatus.PENDING : PaymentStatus.PAID,
-      payment_method: paymentMethod,
-      subtotal,
-      tax,
-      discount: 0,
-      total,
-      notes,
-      pickup_date: pickupDate,
-      expected_pickup_slot: expectedPickupSlot,
-    })
-    .select()
-    .single();
+  // Use the atomic place_order RPC
+  const payload = {
+    userId,
+    stallId,
+    items: items.map(item => ({
+      mealId: item.meal.id,
+      quantity: item.quantity,
+      useSubscription: !!item.subscriptionId
+    })),
+    pickupDate,
+    expectedPickupSlot,
+    paymentMethod,
+    notes,
+    subscriptionId,
+  };
 
-  if (orderError) throw orderError;
+  const { data: result, error: rpcError } = await supabase.rpc('place_order', {
+    p_payload: payload,
+  });
 
-  const orderItemsInsert = items.map((item) => ({
-    order_id: orderData.id,
-    meal_id: item.meal.id,
-    meal_name: item.meal.name,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    total_price: item.totalPrice,
-    subscription_id: item.subscriptionId ?? null,
-    credits_used: item.creditsUsed ?? 0,
-  }));
+  if (rpcError) throw rpcError;
 
-  const { data: itemsData, error: itemsError } = await supabase
-    .from('order_items')
-    .insert(orderItemsInsert)
-    .select();
-
-  if (itemsError) throw itemsError;
-
-  // If there are subscription updates, apply them now
-  if (subscriptionUpdates) {
-    const { error: subError } = await supabase
-      .from('subscriptions')
-      .update({
-        last_usage_date: subscriptionUpdates.updates.lastUsageDate,
-        daily_credits_used: subscriptionUpdates.updates.dailyCreditsUsed,
-        consumed_meals: subscriptionUpdates.updates.consumedMeals,
-        remaining_meals: subscriptionUpdates.updates.remainingMeals,
-      })
-      .eq('id', subscriptionUpdates.id);
-      
-    if (subError) throw subError;
+  // The RPC returns { error: '...', message: '...' } on structured failure
+  if (result && result.error) {
+    const error = new Error(result.message);
+    (error as any).code = result.error;
+    (error as any).details = result;
+    throw error;
   }
 
-  await NotificationEvents.notifyOrderPlaced(userId, orderNumber, orderData.id);
+  const orderId = result.order_id;
+  const orderNumber = result.order_number;
 
-  return mapOrder(orderData as OrderRow, itemsData as OrderItemRow[]);
+  // Notify listeners
+  await NotificationEvents.notifyOrderPlaced(userId, orderNumber, orderId);
+
+  // Return the fetched order to match signature
+  return fetchOrderById(orderId);
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus, userId: string, orderNumber: string) {

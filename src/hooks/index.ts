@@ -7,3 +7,5 @@ export * from './useOperationalWindow';
 export { queryKeys } from './queryKeys';
 export { useActiveSubscription, useSubscriptionPlan, useSubscriptionPlans, usePurchaseSubscription, useSubscriptionUsageHistory } from './useSubscriptions';
 export { useNotifications, useMarkAllNotificationsAsRead, useMarkNotificationAsRead } from './useNotifications';
+export { useLiveInventory } from './useInventory';
+export type { CustomerInventoryItem } from './useInventory';

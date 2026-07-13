@@ -7,7 +7,7 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useAllMeals, useScheduledMeals, useOperationalWindow } from '@/src/hooks';
+import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { getGreeting, formatFriendlyDate } from '@/src/utils/formatters';
 
 export default function HomeScreen() {
@@ -22,7 +22,21 @@ export default function HomeScreen() {
   
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
 
-  const isLoading = isLoadingOp || isLoadingMeals;
+  // ─── Live Inventory ─────────────────────────────────────────────
+  const stallId = opFacts?.activeMenu?.stall_id;
+  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
+
+  const isLoading = isLoadingOp || isLoadingMeals || isLoadingInventory;
+
+  // Helper to get inventory status for a meal
+  const getInventoryInfo = (mealId: string) => {
+    // If no active inventory batches exist, it returns empty array -> fallback to 'pending' (preorder logic)
+    if (!inventory || inventory.length === 0) return { status: 'pending' as const, quantity: undefined };
+    
+    const item = inventory.find(i => i.meal_id === mealId);
+    if (!item) return { status: 'not_in_batch' as const, quantity: 0 };
+    return { status: item.stock_status, quantity: item.customer_available };
+  };
 
   // ─── Browse Catalog ───────────────────────────────────────
   const { data: allMeals = [] } = useAllMeals();
@@ -202,16 +216,22 @@ export default function HomeScreen() {
       {availableMeals.length > 0 && (
         <Section title={`Menu for ${formatFriendlyDate(opFacts.operationalDate)}`}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
-            {availableMeals.map((meal) => (
-              <MealCard
-                key={meal.id}
-                meal={meal}
-                prominent
-                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                onAddToCart={opFacts.canPlaceOrders ? () => addItem(meal, 1) : undefined}
-                isOrderable={opFacts.canPlaceOrders}
-              />
-            ))}
+            {availableMeals.map((meal) => {
+              const inv = getInventoryInfo(meal.id);
+              const isOrderable = opFacts.canPlaceOrders && inv.status !== 'out_of_stock' && inv.status !== 'not_in_batch';
+              return (
+                <MealCard
+                  key={meal.id}
+                  meal={meal}
+                  prominent
+                  onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+                  onAddToCart={isOrderable ? () => addItem(meal, 1) : undefined}
+                  isOrderable={opFacts.canPlaceOrders}
+                  inventoryStatus={inv.status}
+                  availableQuantity={inv.quantity}
+                />
+              );
+            })}
           </ScrollView>
         </Section>
       )}
@@ -234,13 +254,17 @@ export default function HomeScreen() {
           filteredCatalog.map((meal) => {
             const isScheduled = availableMeals.some(m => m.id === meal.id);
             const isOrderable = opFacts.canPlaceOrders && isScheduled;
+            const inv = getInventoryInfo(meal.id);
+            const isActuallyOrderable = isOrderable && inv.status !== 'out_of_stock' && inv.status !== 'not_in_batch';
             return (
               <MealCard
                 key={meal.id}
                 meal={meal}
                 onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                onAddToCart={isOrderable ? () => addItem(meal, 1) : undefined}
+                onAddToCart={isActuallyOrderable ? () => addItem(meal, 1) : undefined}
                 isOrderable={isOrderable}
+                inventoryStatus={inv.status}
+                availableQuantity={inv.quantity}
               />
             );
           })

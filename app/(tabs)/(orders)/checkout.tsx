@@ -11,7 +11,7 @@ import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 import { placeOrder } from '@/src/services/orders';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/src/hooks/queryKeys';
-import { useScheduledMeals, useActiveSubscription, useSubscriptionPlan, useOperationalWindow } from '@/src/hooks';
+import { useScheduledMeals, useActiveSubscription, useSubscriptionPlan, useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { processSubscription } from '@/src/utils/subscriptionEngine';
 import { PaymentMethod } from '@/src/constants/enums';
 import { PICKUP_LOCATION } from '@/src/constants/config';
@@ -27,6 +27,8 @@ export default function CheckoutScreen() {
   const { data: opFacts, isLoading: isLoadingOp, isError: isOpError } = useOperationalWindow();
   
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
+  const stallId = opFacts?.activeMenu?.stall_id;
+  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
 
@@ -59,6 +61,20 @@ export default function CheckoutScreen() {
     if (invalidItems.length > 0) {
       alert(`One or more items in your cart are no longer available on ${formatFriendlyDate(opFacts.operationalDate)}'s menu. Please remove them to continue.`);
       return;
+    }
+
+    if (inventory && inventory.length > 0) {
+      const overLimitItems = items.filter(cartItem => {
+        const invItem = inventory.find(i => i.meal_id === cartItem.meal.id);
+        if (!invItem) return true; // not in active batch
+        if (cartItem.quantity > invItem.customer_available) return true;
+        return false;
+      });
+
+      if (overLimitItems.length > 0) {
+        alert(`Some items exceed available stock. Please reduce their quantities or remove them.`);
+        return;
+      }
     }
 
     try {
@@ -164,7 +180,17 @@ export default function CheckoutScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
               <QuantitySelector 
                 quantity={item.quantity} 
-                onIncrement={() => updateQuantity(item.meal.id, item.quantity + 1)} 
+                onIncrement={() => {
+                  const invItem = inventory.find(i => i.meal_id === item.meal.id);
+                  const maxAllowed = invItem ? invItem.customer_available : 99;
+                  if (item.quantity < maxAllowed) {
+                    updateQuantity(item.meal.id, item.quantity + 1);
+                  } else if (invItem) {
+                    alert(`Only ${maxAllowed} available.`);
+                  } else {
+                    updateQuantity(item.meal.id, item.quantity + 1);
+                  }
+                }} 
                 onDecrement={() => updateQuantity(item.meal.id, Math.max(1, item.quantity - 1))} 
                 min={1} 
               />
@@ -243,8 +269,8 @@ export default function CheckoutScreen() {
         onPress={handlePlaceOrder} 
         fullWidth 
         size="lg" 
-        loading={isPlacing || isLoadingOp || isLoadingMeals || isLoadingSub || isLoadingPlan} 
-        disabled={isPlacing || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingSub || isLoadingPlan} 
+        loading={isPlacing || isLoadingOp || isLoadingMeals || isLoadingInventory || isLoadingSub || isLoadingPlan} 
+        disabled={isPlacing || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingInventory || isLoadingSub || isLoadingPlan} 
       />
       {/* ─── END NORMAL CHECKOUT CONTENT ─── */}
       </>

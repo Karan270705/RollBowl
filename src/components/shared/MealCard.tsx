@@ -13,12 +13,55 @@ interface MealCardProps {
   compact?: boolean;
   prominent?: boolean;
   isOrderable?: boolean;
+  inventoryStatus?: 'pending' | 'available' | 'low_stock' | 'out_of_stock' | 'not_in_batch';
+  availableQuantity?: number;
 }
 
-export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable }) => {
+export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable, inventoryStatus = 'pending', availableQuantity }) => {
   const typeColor = meal.type === MealType.VEG ? Colors.success : meal.type === MealType.VEGAN ? Colors.success : Colors.error;
-  const unavailable = isOrderable === false ? true : !meal.isAvailable;
-  const unavailableText = isOrderable === false ? 'Not Available Tomorrow' : 'Not Available Today';
+  
+  // Base operational availability
+  const isOperationallyAvailable = isOrderable !== false && meal.isAvailable;
+  
+  // Inventory availability overrides
+  const isInventoryAvailable = inventoryStatus !== 'out_of_stock' && inventoryStatus !== 'not_in_batch';
+  
+  const unavailable = !isOperationallyAvailable || !isInventoryAvailable;
+
+  let unavailableText = 'Not Available';
+  if (isOrderable === false) unavailableText = 'Not Available Today';
+  else if (inventoryStatus === 'not_in_batch') unavailableText = 'Not on Menu Today';
+  else if (inventoryStatus === 'out_of_stock') unavailableText = 'Sold Out';
+
+  const renderInventoryBadge = () => {
+    if (unavailable) return null;
+    
+    if (inventoryStatus === 'low_stock' && availableQuantity !== undefined) {
+      return (
+        <View style={[styles.tagContainer, { backgroundColor: Colors.warning }]}>
+          <Text style={styles.tag}>Only {availableQuantity} left</Text>
+        </View>
+      );
+    }
+    
+    if (inventoryStatus === 'available' && availableQuantity !== undefined) {
+      return (
+        <View style={styles.tagContainer}>
+          <Text style={styles.tag}>{availableQuantity} Available</Text>
+        </View>
+      );
+    }
+
+    if (inventoryStatus === 'pending') {
+      return (
+        <View style={[styles.tagContainer, { backgroundColor: Colors.surfaceElevated }]}>
+          <Text style={[styles.tag, { color: Colors.textSecondary }]}>Stock Pending</Text>
+        </View>
+      );
+    }
+    
+    return null;
+  };
 
   // ─── Prominent variant (Today's Menu hero cards) ─────────
   if (prominent) {
@@ -72,11 +115,13 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
           <Text style={styles.unavailableBadgeText}>{unavailableText}</Text>
         </View>
       )}
-      {/* Tag badge (only for available meals) */}
-      {!unavailable && meal.tags.length > 0 && (
-        <View style={styles.tagContainer}>
-          <Text style={styles.tag}>{meal.tags[0]}</Text>
-        </View>
+      {/* Tag badge / Inventory Badge */}
+      {renderInventoryBadge() || (
+        !unavailable && meal.tags.length > 0 && (
+          <View style={[styles.tagContainer, { backgroundColor: Colors.primary }]}>
+            <Text style={styles.tag}>{meal.tags[0]}</Text>
+          </View>
+        )
       )}
       <View style={styles.info}>
         <View style={styles.row}>

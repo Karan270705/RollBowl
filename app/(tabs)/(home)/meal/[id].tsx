@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { Button, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
-import { useMeal, useScheduledMeals, useOperationalWindow } from '@/src/hooks';
+import { useMeal, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { useCartStore, useUser } from '@/src/store';
 import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
 import { MealType } from '@/src/constants/enums';
@@ -19,8 +19,10 @@ export default function MealDetailScreen() {
 
   const { data: opFacts, isLoading: isLoadingOp, isError: isOpError } = useOperationalWindow();
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
+  const stallId = opFacts?.activeMenu?.stall_id;
+  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
 
-  if (isLoading || isLoadingOp || isLoadingMeals) {
+  if (isLoading || isLoadingOp || isLoadingMeals || isLoadingInventory) {
     return (
       <View style={styles.container}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -60,7 +62,14 @@ export default function MealDetailScreen() {
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : Colors.error;
   const isScheduled = availableMeals.some(m => m.id === meal.id);
-  const isOrderable = opFacts?.canPlaceOrders && isScheduled;
+  
+  // Inventory check
+  const invItem = inventory.find(i => i.meal_id === meal.id);
+  const hasActiveBatch = inventory && inventory.length > 0;
+  const invStatus = hasActiveBatch && invItem ? invItem.stock_status : (hasActiveBatch ? 'not_in_batch' : 'pending');
+  const availableQty = invItem ? invItem.customer_available : 99;
+
+  const isOrderable = opFacts?.canPlaceOrders && isScheduled && invStatus !== 'out_of_stock' && invStatus !== 'not_in_batch';
 
   return (
     <View style={styles.container}>
@@ -102,8 +111,10 @@ export default function MealDetailScreen() {
               <Text style={styles.unavailableBannerText}>
                 {opFacts?.isHoliday
                   ? `Kitchen closed for: ${opFacts.holidayDetails?.title || 'a holiday'}`
-                  : !isScheduled
+                  : !isScheduled || invStatus === 'not_in_batch'
                   ? `Not available for ${opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'upcoming dates'}`
+                  : invStatus === 'out_of_stock'
+                  ? 'Sold Out for today'
                   : 'Ordering is currently closed'}
               </Text>
             </View>
@@ -145,7 +156,16 @@ export default function MealDetailScreen() {
             <Text style={styles.price}>{formatCurrency(meal.price * qty)}</Text>
             {meal.originalPrice && <Text style={styles.originalPrice}>{formatCurrency(meal.originalPrice * qty)}</Text>}
           </View>
-          <QuantitySelector quantity={qty} onIncrement={() => setQty(qty + 1)} onDecrement={() => setQty(Math.max(1, qty - 1))} min={1} />
+          <QuantitySelector 
+            quantity={qty} 
+            onIncrement={() => {
+              if (qty < availableQty) setQty(qty + 1);
+              else if (hasActiveBatch) alert(`Only ${availableQty} available.`);
+              else setQty(qty + 1);
+            }} 
+            onDecrement={() => setQty(Math.max(1, qty - 1))} 
+            min={1} 
+          />
           <Button
             title="Add to Cart"
             onPress={() => { addItem(meal, qty); router.back(); }}
@@ -163,7 +183,11 @@ export default function MealDetailScreen() {
         <View style={styles.bottomBarDisabled}>
           <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
           <Text style={styles.disabledText}>
-            {!isScheduled ? `This item is not available for ${opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'upcoming dates'}` : 'Ordering is closed'}
+            {!isScheduled || invStatus === 'not_in_batch' 
+              ? `This item is not available for ${opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'upcoming dates'}` 
+              : invStatus === 'out_of_stock' 
+              ? 'Sold Out'
+              : 'Ordering is closed'}
           </Text>
         </View>
       )}

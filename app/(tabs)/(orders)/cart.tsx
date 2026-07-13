@@ -7,10 +7,14 @@ import { ScreenWrapper } from '@/src/components/layout';
 import { Button, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
 import { useCartStore } from '@/src/store';
+import { useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { formatCurrency } from '@/src/utils/formatters';
 
 export default function CartScreen() {
   const router = useRouter();
+  const { data: opFacts } = useOperationalWindow();
+  const stallId = opFacts?.activeMenu?.stall_id;
+  const { data: inventory = [] } = useLiveInventory(stallId, opFacts?.operationalDate);
   const { items, updateQuantity, removeItem, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
   const tax = Math.round(subtotal * 0.05);
@@ -47,7 +51,17 @@ export default function CartScreen() {
             <Text style={styles.itemPrice}>{formatCurrency(item.meal.price)}</Text>
             <QuantitySelector
               quantity={item.quantity}
-              onIncrement={() => updateQuantity(item.meal.id, item.quantity + 1)}
+              onIncrement={() => {
+                const invItem = inventory.find(i => i.meal_id === item.meal.id);
+                const maxAllowed = invItem ? invItem.customer_available : 99;
+                if (item.quantity < maxAllowed) {
+                  updateQuantity(item.meal.id, item.quantity + 1);
+                } else if (invItem) {
+                  alert(`Only ${maxAllowed} available.`);
+                } else {
+                  updateQuantity(item.meal.id, item.quantity + 1);
+                }
+              }}
               onDecrement={() => updateQuantity(item.meal.id, item.quantity - 1)}
               min={0}
             />
