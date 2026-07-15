@@ -1,0 +1,126 @@
+{
+  "success": true,
+  "columns": [
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "stall_id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "inventory_date",
+      "data_type": "date",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "window_start",
+      "data_type": "time without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "window_end",
+      "data_type": "time without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "notes",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "activated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "closed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "cancelled_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "functions": [
+    {
+      "proname": "update_orders_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "update_inventory_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "update_subscriptions_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "update_menu_schedules_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "update_inventory_batches_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "update_inventory_batch_items_updated_at",
+      "prosrc": "\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n"
+    },
+    {
+      "proname": "validate_inventory_batch_item_modification",
+      "prosrc": "\r\nDECLARE\r\n  v_batch inventory_batches%ROWTYPE;\r\n  v_meal meals%ROWTYPE;\r\n  v_menu_schedule_id UUID;\r\n  v_batch_id UUID;\r\nBEGIN\r\n  -- Determine batch ID based on operation\r\n  IF TG_OP = 'DELETE' THEN\r\n    v_batch_id := OLD.inventory_batch_id;\r\n  ELSE\r\n    v_batch_id := NEW.inventory_batch_id;\r\n  END IF;\r\n\r\n  -- 1. Verify batch exists\r\n  SELECT * INTO v_batch FROM inventory_batches WHERE id = v_batch_id;\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'BATCH_NOT_FOUND',\r\n        'message', 'The referenced inventory batch does not exist.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 2. Verify batch is draft\r\n  IF v_batch.status != 'draft' THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'BATCH_NOT_DRAFT',\r\n        'message', 'Inventory batch items can only be modified when the batch is in draft status.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 3. If DELETE, we are done validating. Staff can remove invalid draft items.\r\n  IF TG_OP = 'DELETE' THEN\r\n    RETURN OLD;\r\n  END IF;\r\n\r\n  -- For INSERT and UPDATE, perform published-menu validation\r\n  \r\n  -- 4. Verify meal exists and gets its stall_id\r\n  SELECT * INTO v_meal FROM meals WHERE id = NEW.meal_id;\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'MEAL_NOT_FOUND',\r\n        'message', 'The referenced meal does not exist.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 5. Verify meal belongs to the same stall as the batch\r\n  IF v_meal.stall_id != v_batch.stall_id THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'MEAL_STALL_MISMATCH',\r\n        'message', 'Meal does not belong to this stall.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 6. Verify meal is available\r\n  IF NOT v_meal.is_available THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'MEAL_NOT_AVAILABLE',\r\n        'message', 'Meal is currently unavailable.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 7. Verify a published menu schedule exists for this stall and date\r\n  SELECT id INTO v_menu_schedule_id\r\n  FROM menu_schedules\r\n  WHERE stall_id = v_batch.stall_id\r\n    AND menu_date = v_batch.inventory_date\r\n    AND is_published = true;\r\n\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'MENU_NOT_PUBLISHED',\r\n        'message', 'No menu has been published for this date.'\r\n      )::text;\r\n  END IF;\r\n\r\n  -- 8. Verify the meal is included in the published schedule\r\n  IF NOT EXISTS (\r\n    SELECT 1 FROM menu_schedule_items \r\n    WHERE menu_schedule_id = v_menu_schedule_id \r\n      AND meal_id = NEW.meal_id\r\n  ) THEN\r\n    RAISE EXCEPTION USING\r\n      ERRCODE = 'P0001',\r\n      MESSAGE = jsonb_build_object(\r\n        'code', 'MEAL_NOT_IN_PUBLISHED_MENU',\r\n        'message', 'Meal is not included in the published menu for this batch date.',\r\n        'meal_id', NEW.meal_id,\r\n        'batch_id', NEW.inventory_batch_id\r\n      )::text;\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n"
+    }
+  ],
+  "tables": [
+    {
+      "table_name": "pg_settings"
+    },
+    {
+      "table_name": "pg_file_settings"
+    },
+    {
+      "table_name": "pg_db_role_setting"
+    },
+    {
+      "table_name": "payment_settings"
+    }
+  ],
+  "record_inventory_movement_exists": true,
+  "record_inventory_movement_definition": "CREATE OR REPLACE FUNCTION public.record_inventory_movement(p_batch_item_id uuid, p_movement_type text, p_quantity integer, p_note text DEFAULT NULL::text, p_reference_order_id uuid DEFAULT NULL::uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nDECLARE\r\n  v_item inventory_batch_items%ROWTYPE;\r\n  v_batch inventory_batches%ROWTYPE;\r\n  v_state RECORD;\r\nBEGIN\r\n  IF auth.uid() IS NULL THEN\r\n    RAISE EXCEPTION '{\"code\": \"UNAUTHORIZED\", \"message\": \"You must be logged in.\"}';\r\n  END IF;\r\n\r\n  IF p_movement_type NOT IN ('walk_in_sale', 'complimentary', 'damaged', 'wasted', 'stock_added', 'correction_increase', 'correction_decrease') THEN\r\n    RAISE EXCEPTION '{\"code\": \"INVALID_PAYLOAD\", \"message\": \"Invalid movement type.\"}';\r\n  END IF;\r\n\r\n  IF p_quantity <= 0 THEN\r\n    RAISE EXCEPTION '{\"code\": \"INVALID_QUANTITY\", \"message\": \"Movement quantity must be positive.\"}';\r\n  END IF;\r\n\r\n  SELECT * INTO v_item FROM inventory_batch_items WHERE id = p_batch_item_id FOR UPDATE;\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION '{\"code\": \"ITEM_NOT_IN_BATCH\", \"message\": \"Inventory batch item not found.\"}';\r\n  END IF;\r\n\r\n  SELECT * INTO v_batch FROM inventory_batches WHERE id = v_item.inventory_batch_id;\r\n  IF NOT is_stall_operator(v_batch.stall_id) THEN\r\n    RAISE EXCEPTION '{\"code\": \"UNAUTHORIZED\", \"message\": \"You are not authorized for this stall.\"}';\r\n  END IF;\r\n\r\n  IF v_batch.status != 'active' THEN\r\n    RAISE EXCEPTION '{\"code\": \"BATCH_NOT_ACTIVE\", \"message\": \"Movements can only be recorded on active batches.\"}';\r\n  END IF;\r\n\r\n  SELECT * INTO v_state FROM live_inventory_status WHERE inventory_batch_item_id = p_batch_item_id;\r\n\r\n  IF p_movement_type IN ('walk_in_sale', 'complimentary') THEN\r\n    IF v_state.extra_available < p_quantity THEN\r\n      RAISE EXCEPTION '{\"code\": \"INSUFFICIENT_STOCK\", \"message\": \"Insufficient stock for walk-in sale. Only % available.\", \"available_quantity\": %}', v_state.extra_available, v_state.extra_available;\r\n    END IF;\r\n  ELSIF p_movement_type IN ('damaged', 'wasted', 'correction_decrease') THEN\r\n    IF v_state.remaining_physical < p_quantity THEN\r\n      RAISE EXCEPTION '{\"code\": \"INSUFFICIENT_STOCK\", \"message\": \"Physical deduction exceeds remaining physical stock. Only % physical units left.\", \"available_quantity\": %}', v_state.remaining_physical, v_state.remaining_physical;\r\n    END IF;\r\n  END IF;\r\n\r\n  INSERT INTO inventory_movements (\r\n    inventory_batch_id, inventory_batch_item_id, meal_id, movement_type, quantity, reference_order_id, created_by, note\r\n  ) VALUES (\r\n    v_item.inventory_batch_id, v_item.id, v_item.meal_id, p_movement_type, p_quantity, p_reference_order_id, auth.uid(), p_note\r\n  );\r\n\r\n  SELECT * INTO v_state FROM live_inventory_status WHERE inventory_batch_item_id = p_batch_item_id;\r\n  RETURN row_to_json(v_state)::jsonb;\r\nEND;\r\n$function$\n",
+  "views": [
+    {
+      "table_name": "live_inventory_status",
+      "view_definition": " WITH movement_stats AS (\n         SELECT inventory_movements.inventory_batch_item_id,\n            sum(\n                CASE\n                    WHEN (inventory_movements.movement_type = ANY (ARRAY['stock_added'::text, 'correction_increase'::text])) THEN inventory_movements.quantity\n                    ELSE 0\n                END) AS manual_inflow,\n            sum(\n                CASE\n                    WHEN (inventory_movements.movement_type = ANY (ARRAY['walk_in_sale'::text, 'complimentary'::text, 'damaged'::text, 'wasted'::text, 'correction_decrease'::text])) THEN inventory_movements.quantity\n                    ELSE 0\n                END) AS manual_outflow\n           FROM inventory_movements\n          GROUP BY inventory_movements.inventory_batch_item_id\n        ), order_stats AS (\n         SELECT oi.meal_id,\n            o.stall_id,\n            o.pickup_date,\n            sum(\n                CASE\n                    WHEN (o.status = ANY (ARRAY['pending'::order_status, 'confirmed'::order_status, 'preparing'::order_status, 'ready'::order_status])) THEN oi.quantity\n                    ELSE 0\n                END) AS active_reserved,\n            sum(\n                CASE\n                    WHEN (o.status = 'picked_up'::order_status) THEN oi.quantity\n                    ELSE 0\n                END) AS fulfilled,\n            sum(\n                CASE\n                    WHEN (o.status = 'cancelled'::order_status) THEN oi.quantity\n                    ELSE 0\n                END) AS cancelled\n           FROM (order_items oi\n             JOIN orders o ON ((oi.order_id = o.id)))\n          GROUP BY oi.meal_id, o.stall_id, o.pickup_date\n        )\n SELECT ibi.id AS inventory_batch_item_id,\n    ib.id AS batch_id,\n    ibi.meal_id,\n    m.name AS item_name,\n    ib.stall_id,\n    ib.inventory_date,\n    ib.window_start,\n    ib.window_end,\n    ib.status AS batch_status,\n    ibi.loaded_quantity,\n    (COALESCE(ms.manual_inflow, (0)::bigint))::integer AS manual_inflow,\n    (COALESCE(ms.manual_outflow, (0)::bigint))::integer AS manual_outflow,\n    (COALESCE(os.active_reserved, (0)::bigint))::integer AS active_reserved,\n    (COALESCE(os.fulfilled, (0)::bigint))::integer AS fulfilled,\n    (COALESCE(os.cancelled, (0)::bigint))::integer AS cancelled,\n    ((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)))::integer AS effective_loaded,\n    ((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)))::integer AS remaining_physical,\n    (((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)) - COALESCE(os.active_reserved, (0)::bigint)))::integer AS extra_available,\n    (GREATEST(((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)) - COALESCE(os.active_reserved, (0)::bigint)), (0)::bigint))::integer AS customer_available,\n        CASE\n            WHEN (((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)) - COALESCE(os.active_reserved, (0)::bigint)) < 0) THEN 'deficit'::text\n            WHEN (((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)) - COALESCE(os.active_reserved, (0)::bigint)) = 0) THEN 'out_of_stock'::text\n            WHEN (((((ibi.loaded_quantity + COALESCE(ms.manual_inflow, (0)::bigint)) - COALESCE(os.fulfilled, (0)::bigint)) - COALESCE(ms.manual_outflow, (0)::bigint)) - COALESCE(os.active_reserved, (0)::bigint)) <= 5) THEN 'low_stock'::text\n            ELSE 'available'::text\n        END AS stock_status\n   FROM ((((inventory_batch_items ibi\n     JOIN inventory_batches ib ON ((ibi.inventory_batch_id = ib.id)))\n     JOIN meals m ON ((ibi.meal_id = m.id)))\n     LEFT JOIN movement_stats ms ON ((ms.inventory_batch_item_id = ibi.id)))\n     LEFT JOIN order_stats os ON (((os.meal_id = ibi.meal_id) AND (os.stall_id = ib.stall_id) AND (os.pickup_date = ib.inventory_date))));"
+    },
+    {
+      "table_name": "customer_safe_inventory",
+      "view_definition": " SELECT batch_id,\n    stall_id,\n    inventory_date,\n    window_start,\n    window_end,\n    meal_id,\n    item_name,\n    customer_available,\n        CASE\n            WHEN (stock_status = 'deficit'::text) THEN 'out_of_stock'::text\n            ELSE stock_status\n        END AS stock_status,\n    batch_status\n   FROM live_inventory_status\n  WHERE (batch_status = 'active'::text);"
+    }
+  ]
+}

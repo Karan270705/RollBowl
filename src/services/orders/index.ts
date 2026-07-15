@@ -17,6 +17,8 @@ interface OrderRow {
   order_type: string;
   payment_status: string;
   payment_method: string;
+  payment_verification_status: string;
+  payment_proof_deadline: string | null;
   subtotal: number;
   tax: number;
   discount: number;
@@ -70,6 +72,8 @@ function mapOrder(orderRow: OrderRow, itemsRows: OrderItemRow[] = []): Order {
     orderType: orderRow.order_type as OrderType,
     paymentStatus: orderRow.payment_status as PaymentStatus,
     paymentMethod: orderRow.payment_method as import('@/src/constants/enums').PaymentMethod,
+    paymentVerificationStatus: orderRow.payment_verification_status as import('@/src/constants/enums').PaymentVerificationStatus,
+    paymentProofDeadline: orderRow.payment_proof_deadline ?? undefined,
     subtotal: Number(orderRow.subtotal),
     tax: Number(orderRow.tax),
     discount: Number(orderRow.discount),
@@ -159,7 +163,7 @@ export async function placeOrder(
   notes?: string
 ): Promise<Order> {
   // SERVER-SIDE OPERATIONAL VALIDATION
-  const opFacts = await resolveOperationalFacts();
+  const opFacts = await resolveOperationalFacts(stallId, pickupDate);
   
   if (opFacts.status === 'HOLIDAY') {
     throw new Error('Cannot place an order on a Kitchen Holiday.');

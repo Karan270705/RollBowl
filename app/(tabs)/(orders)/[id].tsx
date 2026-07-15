@@ -1,19 +1,33 @@
 import { ScreenWrapper, Section } from '@/src/components/layout';
 import { Button, LoadingSpinner, StatusBadge } from '@/src/components/ui';
-import { OrderStatus, PaymentMethodLabels, PaymentStatus } from '@/src/constants/enums';
+import { OrderStatus, PaymentMethodLabels, PaymentStatus, PaymentVerificationStatus, PaymentMethod } from '@/src/constants/enums';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
 import { useOrder } from '@/src/hooks';
 import { formatCurrency, formatRelativeTime, formatFriendlyDate } from '@/src/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { PaymentStatusBadge } from '@/src/components/payments/PaymentStatusBadge';
+import { UpiPaymentPanel } from '@/src/components/payments/UpiPaymentPanel';
+import { PaymentScreenshotPicker, SelectedImage } from '@/src/components/payments/PaymentScreenshotPicker';
+import { CustomerPaymentProofModal } from '@/src/components/payments/CustomerPaymentProofModal';
+import { usePaymentSettings, useSubmitOrderProof } from '@/src/hooks/payments/usePayments';
+import { uploadPaymentScreenshot, parsePaymentBackendError } from '@/src/services/payments';
+import { useUser } from '@/src/store';
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const user = useUser();
 
   const { data: order, isLoading } = useOrder(id);
+  const { data: paymentSettings } = usePaymentSettings(order?.stallId);
+  const submitProofMutation = useSubmitOrderProof();
+
+  const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProofModalVisible, setIsProofModalVisible] = useState(false);
 
   if (isLoading) {
     return (
@@ -35,6 +49,42 @@ export default function OrderDetailsScreen() {
       </ScreenWrapper>
     );
   }
+
+  const handleUploadProof = async () => {
+    if (!user || !order || !selectedImage) return;
+
+    try {
+      setIsUploading(true);
+      
+      const storagePath = await uploadPaymentScreenshot(
+        'orders',
+        user.id,
+        selectedImage.uri,
+        selectedImage.mimeType
+      );
+
+      await submitProofMutation.mutateAsync({
+        orderId: order.id,
+        screenshotPath: storagePath,
+        mimeType: selectedImage.mimeType,
+        size: selectedImage.size,
+      });
+
+      alert('Payment proof submitted successfully!');
+      setSelectedImage(null);
+    } catch (error) {
+      console.error(error);
+      const parsed = parsePaymentBackendError(error);
+      alert(parsed.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const needsProof = 
+    order.paymentMethod === PaymentMethod.UPI && 
+    (order.paymentVerificationStatus === PaymentVerificationStatus.AWAITING_PROOF || 
+     order.paymentVerificationStatus === PaymentVerificationStatus.REJECTED);
 
   return (
     <ScreenWrapper>
@@ -101,7 +151,6 @@ export default function OrderDetailsScreen() {
                 </View>
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.mealName}</Text>
-                  {/* Add-ons unsupported in current DB schema for order items, omitting */}
                 </View>
                 <Text style={styles.itemPrice}>{formatCurrency(item.totalPrice)}</Text>
               </View>
@@ -116,15 +165,26 @@ export default function OrderDetailsScreen() {
               <Text style={styles.summaryLabel}>Payment Method</Text>
               <Text style={styles.summaryValue}>{PaymentMethodLabels[order.paymentMethod] || 'Unknown'}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Payment Status</Text>
-              <Text style={[
-                styles.summaryValue, 
-                { color: order.paymentStatus === PaymentStatus.PENDING ? Colors.warning : Colors.success }
-              ]}>
-                {order.paymentStatus === PaymentStatus.PENDING ? 'Pending Payment' : 'Paid'}
-              </Text>
-            </View>
+            
+            {order.paymentMethod === PaymentMethod.UPI && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Verification Status</Text>
+                <PaymentStatusBadge status={order.paymentVerificationStatus} />
+              </View>
+            )}
+            
+            {order.paymentMethod === PaymentMethod.CASH && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Payment Status</Text>
+                <Text style={[
+                  styles.summaryValue, 
+                  { color: order.paymentStatus === PaymentStatus.PENDING ? Colors.warning : Colors.success }
+                ]}>
+                  {order.paymentStatus === PaymentStatus.PENDING ? 'Cash due at pickup' : 'Paid'}
+                </Text>
+              </View>
+            )}
+
             <View style={[styles.summaryRow, { marginTop: Spacing.sm, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.borderLight }]}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
@@ -137,9 +197,65 @@ export default function OrderDetailsScreen() {
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
             </View>
+
+            {order.paymentMethod === PaymentMethod.UPI && 
+             order.paymentVerificationStatus !== PaymentVerificationStatus.AWAITING_PROOF && 
+             order.paymentVerificationStatus !== PaymentVerificationStatus.NOT_REQUIRED && (
+              <TouchableOpacity 
+                style={styles.viewScreenshotBtn} 
+                onPress={() => setIsProofModalVisible(true)}
+              >
+                <Ionicons name="image-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
+                <Text style={styles.viewScreenshotBtnText}>View Uploaded Screenshot</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </Section>
+
+        {/* UPI Recovery / Upload Section */}
+        {needsProof && paymentSettings && (
+          <Section title="Complete Payment">
+            {order.paymentVerificationStatus === PaymentVerificationStatus.REJECTED && (
+              <View style={styles.rejectionCard}>
+                <Ionicons name="alert-circle" size={24} color={Colors.error} style={{ marginRight: Spacing.sm }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rejectionTitle}>Payment Rejected</Text>
+                  <Text style={styles.rejectionText}>Your previous screenshot was rejected. Please upload a valid payment proof.</Text>
+                </View>
+              </View>
+            )}
+
+            <UpiPaymentPanel
+              amount={order.total}
+              recipientName={paymentSettings.recipientName}
+              upiId={paymentSettings.upiId}
+              qrImagePath={paymentSettings.qrImagePath}
+            >
+              <PaymentScreenshotPicker
+                onImageSelected={setSelectedImage}
+                selectedImage={selectedImage}
+                isUploading={isUploading}
+              />
+            </UpiPaymentPanel>
+            
+            <Button
+              title={isUploading ? "Uploading..." : "Submit Payment Proof"}
+              onPress={handleUploadProof}
+              fullWidth
+              size="lg"
+              loading={isUploading}
+              disabled={!selectedImage || isUploading}
+              style={{ marginTop: Spacing.lg }}
+            />
+          </Section>
+        )}
       </ScrollView>
+
+      <CustomerPaymentProofModal
+        visible={isProofModalVisible}
+        onClose={() => setIsProofModalVisible(false)}
+        orderId={order.id}
+      />
     </ScreenWrapper>
   );
 }
@@ -263,11 +379,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.family.medium,
     color: Colors.textPrimary,
   },
-  itemAddons: {
-    fontSize: Typography.size.xs,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
   itemPrice: {
     fontSize: Typography.size.base,
     fontFamily: Typography.family.medium,
@@ -284,6 +395,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: Spacing.sm,
+    alignItems: 'center',
   },
   summaryLabel: {
     fontSize: Typography.size.sm,
@@ -308,6 +420,41 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: Typography.size.lg,
     fontFamily: Typography.family.bold,
+    color: Colors.primary,
+  },
+  rejectionCard: {
+    flexDirection: 'row',
+    backgroundColor: Colors.errorLight,
+    padding: Spacing.md,
+    borderRadius: Radii.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.error + '30',
+  },
+  rejectionTitle: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.error,
+    marginBottom: 2,
+  },
+  rejectionText: {
+    fontSize: Typography.size.xs,
+    color: Colors.error,
+  },
+  viewScreenshotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primaryBg,
+    borderRadius: Radii.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  viewScreenshotBtnText: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
     color: Colors.primary,
   },
 });

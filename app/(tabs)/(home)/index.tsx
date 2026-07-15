@@ -8,7 +8,7 @@ import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
 import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
-import { getGreeting, formatFriendlyDate } from '@/src/utils/formatters';
+import { getGreeting, formatFriendlyDate, formatTimeSlot } from '@/src/utils/formatters';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -215,6 +215,12 @@ export default function HomeScreen() {
       {/* ─── Section: Operational Menu ─── */}
       {availableMeals.length > 0 && (
         <Section title={`Menu for ${formatFriendlyDate(opFacts.operationalDate)}`}>
+          {(!inventory || inventory.length === 0) && (opFacts.status === 'PICKUP_ACTIVE' || opFacts.status === 'ORDERING_CLOSED') && (
+            <View style={styles.noBatchBanner}>
+              <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} style={{ marginRight: Spacing.xs }} />
+              <Text style={styles.noBatchText}>Live pickup stock has not been loaded yet.</Text>
+            </View>
+          )}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
             {availableMeals.map((meal) => {
               const inv = getInventoryInfo(meal.id);
@@ -330,5 +336,18 @@ const styles = StyleSheet.create({
   resumeText: {
     flex: 1, fontSize: Typography.size.sm, color: Colors.success,
     fontFamily: Typography.family.medium, lineHeight: 20,
+  },
+  noBatchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primaryBg,
+    padding: Spacing.sm,
+    borderRadius: Radii.md,
+    marginBottom: Spacing.sm,
+  },
+  noBatchText: {
+    fontFamily: Typography.family.medium,
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
   },
 });

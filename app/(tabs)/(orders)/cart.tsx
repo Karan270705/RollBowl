@@ -45,7 +45,11 @@ export default function CartScreen() {
 
       {items.map((item) => (
         <View key={item.meal.id} style={styles.cartItem}>
-          <Image source={{ uri: item.meal.imageUrl }} style={styles.itemImage} />
+          {item.meal.imageUrl ? (
+            <Image source={{ uri: item.meal.imageUrl }} style={styles.itemImage} />
+          ) : (
+            <View style={styles.itemImage} />
+          )}
           <View style={styles.itemInfo}>
             <Text style={styles.itemName} numberOfLines={1}>{item.meal.name}</Text>
             <Text style={styles.itemPrice}>{formatCurrency(item.meal.price)}</Text>

@@ -21,28 +21,20 @@ export interface OperationalFacts {
  * Helper to parse a time string "HH:mm" and set it on a target date object.
  */
 function setTimeOnDate(date: Date | string, timeStr: string): Date {
-  const target = new Date(date);
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  target.setHours(hours, minutes, 0, 0);
-  return target;
+  const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+  return parseTimeToDateIST(dateStr, timeStr);
 }
+
+import { getCurrentISTTime, parseTimeToDateIST } from '@/src/utils/operationalDate';
 
 /**
  * The Central Factual Engine
  * Resolves the operational state purely based on business timings.
  */
-export async function resolveOperationalFacts(): Promise<OperationalFacts> {
-  const now = new Date();
+export async function resolveOperationalFacts(stallId: string, resolvedOperationalDate: string): Promise<OperationalFacts> {
+  const operationalDate = resolvedOperationalDate;
   
-  // 1. The Operational Shift
-  const pickupEnd = setTimeOnDate(now, AppConfig.BUSINESS.PICKUP_END_TIME);
-  const operationalDateObj = new Date(now);
-  
-  if (now > pickupEnd) {
-    operationalDateObj.setDate(operationalDateObj.getDate() + 1);
-  }
-  
-  const operationalDate = operationalDateObj.toISOString().split('T')[0];
+  const now = getCurrentISTTime();
 
   // 2. State Evaluation: Holiday Check
   const { data: holidayData } = await supabase

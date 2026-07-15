@@ -1,0 +1,2 @@
+[functions.cleanup-payment-proofs]
+verify_jwt = false

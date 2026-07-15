@@ -1,26 +1,70 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii } from '@/src/constants/theme';
 import { Button } from '@/src/components/ui';
+import { fetchOrderById } from '@/src/services/orders';
+import { Order } from '@/src/types/models';
+import { PaymentMethod, PaymentVerificationStatus, PaymentStatus } from '@/src/constants/enums';
 
 export default function ConfirmationScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (orderId) {
+      fetchOrderById(orderId)
+        .then(setOrder)
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [orderId]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  let statusText = 'Pending';
+  let isAwaitingProof = false;
+  let statusColor: string = Colors.primary;
+
+  if (order) {
+    if (order.paymentMethod === PaymentMethod.CASH && order.paymentStatus === PaymentStatus.PENDING) {
+      statusText = 'Cash due at pickup';
+    } else if (order.paymentMethod === PaymentMethod.UPI) {
+      if (order.paymentVerificationStatus === PaymentVerificationStatus.AWAITING_PROOF) {
+        statusText = 'Payment screenshot required';
+        isAwaitingProof = true;
+        statusColor = Colors.warning;
+      } else if (order.paymentVerificationStatus === PaymentVerificationStatus.PENDING) {
+        statusText = 'Payment verification pending';
+      }
+    }
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
-        <Ionicons name="checkmark-circle" size={72} color={Colors.success} />
+        <Ionicons name={isAwaitingProof ? "time-outline" : "checkmark-circle"} size={72} color={isAwaitingProof ? Colors.warning : Colors.success} />
       </View>
       <Text style={styles.title}>Order Placed! 🎉</Text>
-      <Text style={styles.subtitle}>Your order has been received by the kitchen.</Text>
+      <Text style={styles.subtitle}>Your order has been saved.</Text>
       <View style={styles.infoCard}>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Status</Text><Text style={[styles.infoValue, { color: Colors.primary }]}>Pending</Text></View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Status</Text>
+          <Text style={[styles.infoValue, { color: statusColor }]}>{statusText}</Text>
+        </View>
       </View>
       <View style={styles.buttons}>
-        <Button title="Track Order" onPress={() => router.push(`/(tabs)/(orders)/track/${orderId}` as any)} fullWidth />
+        <Button title={isAwaitingProof ? "Complete Payment Proof" : "View Order"} onPress={() => router.push(`/(tabs)/(orders)/${orderId}` as any)} fullWidth />
         <Button title="Back to Home" onPress={() => router.replace('/(tabs)/(home)' as any)} variant="outline" fullWidth />
       </View>
     </View>

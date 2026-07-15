@@ -1,13 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@/src/store';
-import { useActiveSubscription, useSubscriptionPlans, usePurchaseSubscription, useSubscriptionUsageHistory } from '@/src/hooks';
-import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
+import { useActiveSubscription, useSubscriptionPlans, useSubscriptionUsageHistory } from '@/src/hooks';
+import { useSubscriptionRequests } from '@/src/hooks/payments/usePayments';
+import { formatCurrency, formatFriendlyDate, formatRelativeTime } from '@/src/utils/formatters';
+import { PaymentStatusBadge } from '@/src/components/payments/PaymentStatusBadge';
+import { CustomerPaymentProofModal } from '@/src/components/payments/CustomerPaymentProofModal';
+import { SubscriptionRequestStatus } from '@/src/constants/enums';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
@@ -15,17 +19,35 @@ export default function SubscriptionScreen() {
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plans, isLoading: isLoadingPlans } = useSubscriptionPlans();
   const { data: history = [], isLoading: isLoadingHistory } = useSubscriptionUsageHistory(subscription?.id);
-  const purchaseMutation = usePurchaseSubscription();
+  const { data: requests = [], isLoading: isLoadingRequests } = useSubscriptionRequests(user?.id);
+
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [isProofModalVisible, setIsProofModalVisible] = useState(false);
+
+  const pendingRequests = requests.filter(r => 
+    r.status === SubscriptionRequestStatus.AWAITING_PROOF || 
+    r.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
+    r.status === SubscriptionRequestStatus.REJECTED
+  );
 
   const handlePurchase = (plan: any) => {
     if (!user) return;
     router.push({
-      pathname: '/(tabs)/(subscription)/terms',
+      pathname: '/(tabs)/(subscription)/purchase/[planId]',
       params: { planId: plan.id }
     } as any);
   };
 
-  if (isLoadingSub || isLoadingPlans) {
+  const handleRequestPress = (reqId: string, planId: string) => {
+    // If they need to upload proof again, take them to the purchase flow
+    // Or a dedicated request detail screen. Let's use the purchase flow which supports recovery.
+    router.push({
+      pathname: '/(tabs)/(subscription)/purchase/[planId]',
+      params: { planId: planId }
+    } as any);
+  };
+
+  if (isLoadingSub || isLoadingPlans || isLoadingRequests) {
     return (
       <ScreenWrapper>
         <View style={styles.header}><Text style={styles.title}>My Subscription</Text></View>
@@ -41,6 +63,50 @@ export default function SubscriptionScreen() {
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Spacing['3xl'] }}>
         
+        {/* Pending Requests */}
+        {pendingRequests.length > 0 && (
+          <View style={{ marginBottom: Spacing.xl }}>
+            <Text style={styles.sectionTitle}>Pending Requests</Text>
+            {pendingRequests.map(req => {
+              const plan = plans?.find(p => p.id === req.planId);
+              return (
+                <View key={req.id} style={styles.requestContainer}>
+                  <TouchableOpacity 
+                    style={styles.requestCard}
+                    onPress={() => handleRequestPress(req.id, req.planId)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.requestPlanName}>{plan?.name || 'Subscription Plan'}</Text>
+                      <Text style={styles.requestDate}>{formatRelativeTime(req.requestedAt)}</Text>
+                      <View style={{ marginTop: Spacing.sm }}>
+                        <PaymentStatusBadge status={req.status} />
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                      <Text style={styles.requestAmount}>{formatCurrency(req.expectedAmount)}</Text>
+                      <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} style={{ marginTop: Spacing.xs }} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {(req.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
+                    req.status === SubscriptionRequestStatus.REJECTED) && (
+                    <TouchableOpacity 
+                      style={styles.viewProofRequestBtn} 
+                      onPress={() => {
+                        setSelectedRequestId(req.id);
+                        setIsProofModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="image-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
+                      <Text style={styles.viewProofRequestBtnText}>View Uploaded Screenshot</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* Active Dashboard */}
         {subscription ? (
           <View style={styles.dashboardCard}>
@@ -64,40 +130,6 @@ export default function SubscriptionScreen() {
                 </Text>
               </View>
             )}
-
-            {subscription.extendedDays > 0 && (() => {
-              // Compute original expiry date (end_date minus extended_days)
-              const newExpiry = new Date(subscription.endDate);
-              const originalExpiry = new Date(subscription.endDate);
-              originalExpiry.setDate(originalExpiry.getDate() - subscription.extendedDays);
-              return (
-                <View style={[styles.expiryMessage, { backgroundColor: Colors.infoLight, marginTop: Spacing.sm }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm }}>
-                    <Ionicons name="calendar" size={20} color={Colors.infoDark} />
-                    <Text style={[styles.expiryText, { color: Colors.infoDark, fontFamily: Typography.family.bold }]}>
-                      Subscription Extended
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Original Expiry</Text>
-                    <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.medium, color: Colors.textPrimary }}>
-                      {formatFriendlyDate(originalExpiry.toISOString().split('T')[0])}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.sm }}>
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>New Expiry</Text>
-                    <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.infoDark }}>
-                      {formatFriendlyDate(newExpiry.toISOString().split('T')[0])}
-                    </Text>
-                  </View>
-                  <View style={{ backgroundColor: Colors.infoDark + '15', borderRadius: Radii.sm, padding: Spacing.sm }}>
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.infoDark, fontFamily: Typography.family.semiBold, lineHeight: 18 }}>
-                      Your subscription validity has been automatically extended by {subscription.extendedDays} day{subscription.extendedDays > 1 ? 's' : ''} due to Kitchen Holidays.
-                    </Text>
-                  </View>
-                </View>
-              );
-            })()}
 
             <View style={styles.progressContainer}>
               <View style={styles.progressRow}>
@@ -192,7 +224,7 @@ export default function SubscriptionScreen() {
                   )}
                   {plan.features.map((feature, i) => (
                     <View key={i} style={styles.featureItem}>
-                      <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                       <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
                       <Text style={styles.featureText}>{feature}</Text>
                     </View>
                   ))}
@@ -202,13 +234,18 @@ export default function SubscriptionScreen() {
                   title={`Subscribe • ${formatCurrency(plan.price)}`} 
                   onPress={() => handlePurchase(plan)} 
                   fullWidth
-                  loading={purchaseMutation.isPending}
                 />
               </View>
             ))}
           </View>
         )}
       </ScrollView>
+
+      <CustomerPaymentProofModal
+        visible={isProofModalVisible}
+        onClose={() => setIsProofModalVisible(false)}
+        subscriptionRequestId={selectedRequestId || undefined}
+      />
     </ScreenWrapper>
   );
 }
@@ -254,4 +291,52 @@ const styles = StyleSheet.create({
   historyMeal: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
   historyDate: { fontSize: Typography.size.xs, color: Colors.textSecondary, marginTop: 2 },
   historyCredits: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.primary },
+
+  requestCard: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+  },
+  requestPlanName: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  requestDate: {
+    fontSize: Typography.size.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  requestAmount: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  requestContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.md,
+    marginBottom: Spacing.sm,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.sm,
+  },
+  viewProofRequestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
+    paddingVertical: 6,
+    backgroundColor: Colors.primaryBg,
+    borderRadius: Radii.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  viewProofRequestBtnText: {
+    fontSize: Typography.size.xs,
+    fontFamily: Typography.family.medium,
+    color: Colors.primary,
+  },
 });

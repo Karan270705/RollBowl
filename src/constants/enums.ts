@@ -25,6 +25,15 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
 }
 
+export enum PaymentVerificationStatus {
+  NOT_REQUIRED = 'not_required',
+  AWAITING_PROOF = 'awaiting_proof',
+  PENDING = 'pending',
+  VERIFIED = 'verified',
+  REJECTED = 'rejected',
+  EXPIRED = 'expired',
+}
+
 export enum PaymentMethod {
   UPI = 'upi',
   CARD = 'card',
@@ -35,6 +44,14 @@ export enum SubscriptionStatus {
   ACTIVE = 'active',
   PAUSED = 'paused',
   EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+}
+
+export enum SubscriptionRequestStatus {
+  AWAITING_PROOF = 'awaiting_proof',
+  VERIFICATION_PENDING = 'verification_pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
   CANCELLED = 'cancelled',
 }
 

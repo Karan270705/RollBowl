@@ -12,7 +12,9 @@ import {
   OrderType,
   PaymentStatus,
   PaymentMethod,
+  PaymentVerificationStatus,
   SubscriptionStatus,
+  SubscriptionRequestStatus,
   UserRole,
 } from '@/src/constants/enums';
 
@@ -141,6 +143,8 @@ export interface Order {
   orderType: OrderType;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  paymentVerificationStatus: PaymentVerificationStatus;
+  paymentProofDeadline?: string;
   subtotal: number;
   tax: number;
   discount: number;
@@ -255,6 +259,30 @@ export interface PaymentRecord {
   method: string;
   transactionId?: string;
   createdAt: string;
+}
+
+export interface PaymentSettings {
+  id: string;
+  stallId: string;
+  recipientName: string;
+  upiId: string;
+  qrImagePath?: string;
+  isActive: boolean;
+}
+
+export interface SubscriptionPurchaseRequest {
+  id: string;
+  userId: string;
+  stallId: string;
+  planId: string;
+  expectedAmount: number;
+  status: SubscriptionRequestStatus;
+  currentPaymentProofId?: string;
+  requestedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  createdSubscriptionId?: string;
 }
 
 // ─── Extra Meal Reservation ─────────────────────────────────

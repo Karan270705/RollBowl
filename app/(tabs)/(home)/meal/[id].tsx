@@ -74,7 +74,11 @@ export default function MealDetailScreen() {
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Image source={{ uri: meal.imageUrl }} style={styles.image} />
+        {meal.imageUrl ? (
+          <Image source={{ uri: meal.imageUrl }} style={styles.image} />
+        ) : (
+          <View style={styles.image} />
+        )}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>

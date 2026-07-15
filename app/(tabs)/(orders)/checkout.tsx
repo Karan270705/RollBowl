@@ -1,339 +1,501 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
-import { ScreenWrapper } from '@/src/components/layout';
-import { Button } from '@/src/components/ui';
-import { QuantitySelector } from '@/src/components/shared';
-import { useCartStore, useUser } from '@/src/store';
-import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
-import { placeOrder } from '@/src/services/orders';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/src/hooks/queryKeys';
-import { useScheduledMeals, useActiveSubscription, useSubscriptionPlan, useOperationalWindow, useLiveInventory } from '@/src/hooks';
-import { processSubscription } from '@/src/utils/subscriptionEngine';
-import { PaymentMethod } from '@/src/constants/enums';
-import { PICKUP_LOCATION } from '@/src/constants/config';
+import { ScreenWrapper } from "@/src/components/layout";
+import { QuantitySelector } from "@/src/components/shared";
+import { Button } from "@/src/components/ui";
+import { PICKUP_LOCATION } from "@/src/constants/config";
+import { PaymentMethod } from "@/src/constants/enums";
+import {
+  Colors,
+  Radii,
+  Shadows,
+  Spacing,
+  Typography,
+} from "@/src/constants/theme";
+import {
+  useActiveSubscription,
+  useLiveInventory,
+  useOperationalWindow,
+  useScheduledMeals,
+  useSubscriptionPlan,
+} from "@/src/hooks";
+import { queryKeys } from "@/src/hooks/queryKeys";
+import { placeOrder } from "@/src/services/orders";
+import { useCartStore, useUser } from "@/src/store";
+import { formatCurrency, formatFriendlyDate } from "@/src/utils/formatters";
+import { processSubscription } from "@/src/utils/subscriptionEngine";
+import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import { UpiPaymentPanel } from "@/src/components/payments/UpiPaymentPanel";
+import { PaymentScreenshotPicker, SelectedImage } from "@/src/components/payments/PaymentScreenshotPicker";
+import { usePaymentSettings, useSubmitOrderProof } from "@/src/hooks/payments/usePayments";
+import { uploadPaymentScreenshot, parsePaymentBackendError } from "@/src/services/payments";
+
+type CheckoutState = 'idle' | 'creating_order' | 'order_created' | 'uploading_proof' | 'linking_proof' | 'proof_submitted' | 'recovery_required';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { items, getSubtotal, clearCart, updateQuantity, removeItem } = useCartStore();
+  const { items, clearCart, updateQuantity, removeItem } = useCartStore();
   const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
   const user = useUser();
-  const [isPlacing, setIsPlacing] = useState(false);
-  const [pickupSlot, setPickupSlot] = useState<string>('12:00–12:30');
-  const { data: opFacts, isLoading: isLoadingOp, isError: isOpError } = useOperationalWindow();
+  const [pickupSlot, setPickupSlot] = useState<string>("12:00-12:30");
   
+  // Staged UPI state
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>('idle');
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [backendTotal, setBackendTotal] = useState<number | null>(null);
+  const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
+
+  const { data: opFacts, isLoading: isLoadingOp } = useOperationalWindow();
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
+  
   const stallId = opFacts?.activeMenu?.stall_id;
+  
+  // Payment Settings
+  const { data: paymentSettings, isLoading: isLoadingSettings } = usePaymentSettings(stallId);
+  const submitProofMutation = useSubmitOrderProof();
+
   const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
 
-  // Fallback to empty string for safety if operationalDate is null (caught in validation below)
-  const engineResult = processSubscription(items, subscription || null, plan || null, opFacts?.operationalDate || '');
+  // Engine logic
+  const engineResult = processSubscription(
+    items,
+    subscription || null,
+    plan || null,
+    opFacts?.operationalDate || "",
+  );
   const subtotal = engineResult.newSubtotal;
   const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
+  const frontendTotal = subtotal + tax;
   const isSubscriptionApplied = engineResult.subscriptionUpdates !== null;
+  const isFullyCoveredBySubscription = items.length > 0 && frontendTotal === 0 && isSubscriptionApplied;
 
-  const handlePlaceOrder = async () => {
+  const displayTotal = backendTotal !== null ? backendTotal : frontendTotal;
+
+  const handlePlaceOrderClick = async () => {
     if (!user || items.length === 0) return;
-    
-    // Store Status Validation
-    if (!opFacts?.canPlaceOrders) {
-      alert('Ordering is currently closed or a holiday is declared.');
+
+    if (!opFacts?.canPlaceOrders || !opFacts.operationalDate) {
+      alert("Ordering is currently closed or cannot determine date.");
       return;
     }
 
-    if (!opFacts.operationalDate) {
-      alert('Cannot determine the operational date.');
-      return;
-    }
-
-    // Cart Validation
-    const invalidItems = items.filter(cartItem => 
-      !scheduledMeals.some(meal => meal.id === cartItem.meal.id)
-    );
-
+    // Validation
+    const invalidItems = items.filter((cartItem) => !scheduledMeals.some((m) => m.id === cartItem.meal.id));
     if (invalidItems.length > 0) {
-      alert(`One or more items in your cart are no longer available on ${formatFriendlyDate(opFacts.operationalDate)}'s menu. Please remove them to continue.`);
+      alert("Some items are no longer available on today's menu.");
       return;
     }
 
     if (inventory && inventory.length > 0) {
-      const overLimitItems = items.filter(cartItem => {
-        const invItem = inventory.find(i => i.meal_id === cartItem.meal.id);
-        if (!invItem) return true; // not in active batch
-        if (cartItem.quantity > invItem.customer_available) return true;
-        return false;
+      const overLimit = items.filter((cartItem) => {
+        const invItem = inventory.find((i) => i.meal_id === cartItem.meal.id);
+        if (!invItem) return true;
+        return cartItem.quantity > invItem.customer_available;
       });
-
-      if (overLimitItems.length > 0) {
-        alert(`Some items exceed available stock. Please reduce their quantities or remove them.`);
+      if (overLimit.length > 0) {
+        alert("Some items exceed available stock.");
         return;
       }
     }
 
+    // Fully subscription covered bypasses UPI logic
+    const resolvedPaymentMethod = isFullyCoveredBySubscription ? PaymentMethod.CASH : payment;
+
     try {
-      setIsPlacing(true);
-      const stallId = items[0].meal.stallId;
-      const stallName = PICKUP_LOCATION; // Centralized pickup location
-      
-      const subUpdates = engineResult.subscriptionUpdates && subscription ? { id: subscription.id, updates: engineResult.subscriptionUpdates } : undefined;
-      
-      const newOrder = await placeOrder(user.id, user.name, stallId, stallName, engineResult.processedItems, subtotal, tax, total, opFacts.operationalDate, pickupSlot, payment, subUpdates, undefined);
-      
-      // Invalidate the orders cache so the new order shows up immediately
+      setCheckoutState('creating_order');
+      const orderStallId = items[0].meal.stallId;
+      if (!orderStallId) throw new Error("Cannot determine stall for this order.");
+
+      const appliedSubscriptionId = (engineResult.subscriptionUpdates && subscription) ? subscription.id : undefined;
+
+      const newOrder = await placeOrder(
+        user.id,
+        orderStallId,
+        engineResult.processedItems,
+        opFacts.operationalDate,
+        pickupSlot,
+        resolvedPaymentMethod,
+        appliedSubscriptionId,
+        undefined
+      );
+
+      setCreatedOrderId(newOrder.id);
+      setBackendTotal(newOrder.total);
+
+      // Invalidate relevant queries
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
-      
-      // Invalidate subscription cache so Remaining Credits and Usage History update immediately
       await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.active(user.id) });
-      if (subscription) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.history(subscription.id) });
+
+      if (resolvedPaymentMethod === PaymentMethod.UPI && !isFullyCoveredBySubscription) {
+        // Stop here, require proof upload
+        setCheckoutState('order_created');
+      } else {
+        // Cash or fully covered
+        clearCart();
+        setCheckoutState('idle');
+        router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
       }
-      
-      clearCart();
-      router.replace({ pathname: '/(tabs)/(orders)/confirmation', params: { orderId: newOrder.id } } as any);
     } catch (error) {
-      console.error('Failed to place order:', error);
-      alert('Failed to place order. Please try again.');
-    } finally {
-      setIsPlacing(false);
+      console.error(error);
+      const parsed = parsePaymentBackendError(error);
+      alert(parsed.message);
+      setCheckoutState('idle');
     }
   };
+
+  const handleUploadProof = async () => {
+    if (!user || !createdOrderId || !selectedImage) return;
+
+    try {
+      setCheckoutState('uploading_proof');
+      
+      const storagePath = await uploadPaymentScreenshot(
+        'orders',
+        user.id,
+        selectedImage.uri,
+        selectedImage.mimeType
+      );
+
+      setCheckoutState('linking_proof');
+
+      await submitProofMutation.mutateAsync({
+        orderId: createdOrderId,
+        screenshotPath: storagePath,
+        mimeType: selectedImage.mimeType,
+        size: selectedImage.size,
+      });
+
+      setCheckoutState('proof_submitted');
+      clearCart();
+      router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: createdOrderId } } as any);
+
+    } catch (error) {
+      console.error(error);
+      const parsed = parsePaymentBackendError(error);
+      alert(parsed.message);
+      setCheckoutState('recovery_required');
+    }
+  };
+
+  const isLocked = checkoutState !== 'idle';
+  const isRecovering = checkoutState === 'recovery_required' || checkoutState === 'order_created';
+  const isUploading = checkoutState === 'uploading_proof' || checkoutState === 'linking_proof';
 
   return (
     <ScreenWrapper>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} disabled={isLocked && checkoutState !== 'recovery_required'}>
+          <Ionicons name="arrow-back" size={24} color={isLocked && checkoutState !== 'recovery_required' ? Colors.textTertiary : Colors.textPrimary} />
+        </TouchableOpacity>
         <Text style={styles.title}>Checkout</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* ─── HOLIDAY BLOCK ─────────────────────────────────────── */}
-      {opFacts?.isHoliday ? (
-        <View style={styles.holidayBlock}>
-          <Ionicons name="close-circle" size={48} color={Colors.error} />
-          <Text style={styles.holidayBlockTitle}>Kitchen Closed</Text>
-          <Text style={styles.holidayBlockDate}>{formatFriendlyDate(opFacts.operationalDate || '')}</Text>
-          <View style={styles.holidayBlockCard}>
-            <Text style={styles.holidayBlockLabel}>Reason</Text>
-            <Text style={styles.holidayBlockValue}>{opFacts.holidayDetails?.title || 'Public Holiday'}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: Spacing['4xl'] }} showsVerticalScrollIndicator={false}>
+        {opFacts?.isHoliday ? (
+          <View style={styles.holidayBlock}>
+            <Ionicons name="close-circle" size={48} color={Colors.error} />
+            <Text style={styles.holidayBlockTitle}>Kitchen Closed</Text>
+            <Text style={styles.holidayBlockDate}>{formatFriendlyDate(opFacts.operationalDate || "")}</Text>
           </View>
-          <Text style={styles.holidayBlockHint}>No orders can be placed for this date. Ordering will resume automatically the next day.</Text>
-        </View>
-      ) : (
-        <>
-
-        {/* Pickup Information */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Expected Pickup Time</Text>
-          <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.md }}>
-            When do you plan to collect your order on {formatFriendlyDate(opFacts?.operationalDate || '')}?
-          </Text>
-          <View style={styles.chipContainer}>
-            {['12:00–12:30', '12:30–1:00', '1:00–1:30', '1:30–2:00', 'Not Sure'].map((slot) => (
-            <TouchableOpacity 
-              key={slot} 
-              style={[styles.chip, pickupSlot === slot && styles.chipActive]}
-              onPress={() => setPickupSlot(slot)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.chipText, pickupSlot === slot && styles.chipTextActive]}>
-                {slot}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Order Items */}
-      <View style={styles.card}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
-          <Text style={styles.cardTitle}>Order Summary</Text>
-          {items.length > 0 && (
-            <TouchableOpacity onPress={clearCart}>
-              <Text style={{ color: Colors.error, fontSize: Typography.size.sm, fontFamily: Typography.family.medium }}>Empty Cart</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        
-        {engineResult.processedItems.map((item, index) => (
-          <View key={`${item.meal.id}-${index}`} style={styles.itemRow}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: Spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.itemText, { fontFamily: Typography.family.medium }]}>{item.meal.name}</Text>
-                {item.subscriptionId && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <Ionicons name="ticket" size={12} color={Colors.primary} style={{ marginRight: 4 }} />
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.primary }}>Subscription Applied</Text>
-                  </View>
-                )}
+        ) : (
+          <>
+            {isRecovering && (
+              <View style={[styles.card, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight }]}>
+                <Text style={[styles.cardTitle, { color: Colors.warning }]}>Action Required</Text>
+                <Text style={{ fontSize: Typography.size.sm, color: Colors.warning }}>
+                  Your order has been created, but the payment screenshot still needs to be submitted. Please upload the screenshot below to complete your order.
+                </Text>
               </View>
-              <Text style={styles.itemPrice}>
-                {item.quantity} × {item.unitPrice === 0 ? '₹0' : formatCurrency(Number(item.meal.price))} = {formatCurrency(item.totalPrice)}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-              <QuantitySelector 
-                quantity={item.quantity} 
-                onIncrement={() => {
-                  const invItem = inventory.find(i => i.meal_id === item.meal.id);
-                  const maxAllowed = invItem ? invItem.customer_available : 99;
-                  if (item.quantity < maxAllowed) {
-                    updateQuantity(item.meal.id, item.quantity + 1);
-                  } else if (invItem) {
-                    alert(`Only ${maxAllowed} available.`);
-                  } else {
-                    updateQuantity(item.meal.id, item.quantity + 1);
-                  }
-                }} 
-                onDecrement={() => updateQuantity(item.meal.id, Math.max(1, item.quantity - 1))} 
-                min={1} 
+            )}
+
+            {!isRecovering && (
+              <>
+                <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
+                  <Text style={styles.cardTitle}>Expected Pickup Time</Text>
+                  <View style={styles.chipContainer}>
+                    {[
+                      { label: "12:00–12:30", value: "12:00-12:30" },
+                      { label: "12:30–1:00", value: "12:30-13:00" },
+                      { label: "1:00–1:30", value: "13:00-13:30" },
+                      { label: "1:30–2:00", value: "13:30-14:00" },
+                    ].map((slot) => (
+                      <TouchableOpacity
+                        key={slot.value}
+                        style={[styles.chip, pickupSlot === slot.value && styles.chipActive]}
+                        onPress={() => !isLocked && setPickupSlot(slot.value)}
+                        activeOpacity={0.7}
+                        disabled={isLocked}
+                      >
+                        <Text style={[styles.chipText, pickupSlot === slot.value && styles.chipTextActive]}>
+                          {slot.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
+                  <Text style={styles.cardTitle}>Order Summary</Text>
+                  {engineResult.processedItems.map((item, index) => (
+                    <View key={`${item.meal.id}-${index}`} style={styles.itemRow}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%", marginBottom: Spacing.sm }}>
+                        <Text style={[styles.itemText, { fontFamily: Typography.family.medium, flex: 1 }]}>
+                          {item.meal.name}
+                        </Text>
+                        <Text style={styles.itemPrice}>
+                          {item.quantity} × {item.unitPrice === 0 ? "₹0" : formatCurrency(item.unitPrice)} = {formatCurrency(item.totalPrice)}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                        <QuantitySelector
+                          quantity={item.quantity}
+                          onIncrement={() => !isLocked && updateQuantity(item.meal.id, item.quantity + 1)}
+                          onDecrement={() => !isLocked && updateQuantity(item.meal.id, Math.max(1, item.quantity - 1))}
+                          min={1}
+                        />
+                        {index === engineResult.processedItems.findIndex(i => i.meal.id === item.meal.id) && (
+                          <TouchableOpacity onPress={() => !isLocked && removeItem(item.meal.id)} disabled={isLocked}>
+                            <Ionicons name="trash-outline" size={20} color={isLocked ? Colors.textTertiary : Colors.error} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {!isFullyCoveredBySubscription && !isRecovering && (
+              <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
+                <Text style={styles.cardTitle}>Payment Method</Text>
+                {[
+                  { key: PaymentMethod.UPI, label: "UPI", icon: "phone-portrait-outline" as const },
+                  { key: PaymentMethod.CASH, label: "Cash on Pickup", icon: "cash-outline" as const },
+                ].map((p) => {
+                  const isUpiDisabled = p.key === PaymentMethod.UPI && (!paymentSettings || !paymentSettings.isActive);
+                  return (
+                    <TouchableOpacity
+                      key={p.key}
+                      style={[styles.payOption, payment === p.key && styles.payActive, (isLocked || isUpiDisabled) && { opacity: 0.5 }]}
+                      onPress={() => {
+                        if (!isLocked && !isUpiDisabled) setPayment(p.key);
+                      }}
+                      disabled={isLocked || isUpiDisabled}
+                    >
+                      <Ionicons name={p.icon} size={20} color={payment === p.key ? Colors.primary : Colors.textSecondary} />
+                      <Text style={[styles.payText, payment === p.key && styles.payTextActive]}>
+                        {p.label} {isUpiDisabled ? '(Unavailable)' : ''}
+                      </Text>
+                      {payment === p.key && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} style={{ marginLeft: "auto" }} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {!isRecovering && (
+              <View style={[styles.totalCard, isLocked && { opacity: 0.6 }]}>
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Subtotal</Text>
+                  <Text style={styles.totalVal}>{formatCurrency(subtotal)}</Text>
+                </View>
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Tax</Text>
+                  <Text style={styles.totalVal}>{formatCurrency(tax)}</Text>
+                </View>
+                <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
+                  <Text style={styles.grandLabel}>Total</Text>
+                  <Text style={styles.grandVal}>{formatCurrency(displayTotal)}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Stage 1: Order Creation Button */}
+            {!isRecovering && (
+              <Button
+                title={`Place Order • ${formatCurrency(displayTotal)}`}
+                onPress={handlePlaceOrderClick}
+                fullWidth
+                size="lg"
+                loading={checkoutState === 'creating_order' || isLoadingOp || isLoadingMeals || isLoadingSettings}
+                disabled={isLocked || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingSettings}
+                style={{ marginBottom: Spacing.xl }}
               />
-              {/* Only show delete on the first visual chunk for an item to prevent duplicate buttons */}
-              {index === engineResult.processedItems.findIndex(i => i.meal.id === item.meal.id) && (
-                <TouchableOpacity onPress={() => removeItem(item.meal.id)}>
-                  <Ionicons name="trash-outline" size={20} color={Colors.error} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        ))}
+            )}
 
-        {isSubscriptionApplied && subscription && engineResult.subscriptionUpdates && (
-          <View style={{ marginTop: Spacing.md, padding: Spacing.sm, backgroundColor: Colors.primaryBg, borderRadius: Radii.md }}>
-            <Text style={{ fontSize: Typography.size.sm, fontFamily: Typography.family.semiBold, color: Colors.primary, marginBottom: 4 }}>
-              Subscription Summary
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-              <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Credits Consumed:</Text>
-              <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.textPrimary }}>
-                {engineResult.subscriptionUpdates.consumedMeals - subscription.consumedMeals}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: Typography.size.xs, color: Colors.textSecondary }}>Remaining Credits After Order:</Text>
-              <Text style={{ fontSize: Typography.size.xs, fontFamily: Typography.family.bold, color: Colors.textPrimary }}>
-                {engineResult.subscriptionUpdates.remainingMeals}
-              </Text>
-            </View>
-          </View>
+            {/* Stage 2: UPI Upload Flow (Order created but needs proof) */}
+            {(isRecovering) && payment === PaymentMethod.UPI && paymentSettings && (
+              <View style={{ marginTop: Spacing.md }}>
+                <UpiPaymentPanel
+                  amount={displayTotal}
+                  recipientName={paymentSettings.recipientName}
+                  upiId={paymentSettings.upiId}
+                  qrImagePath={paymentSettings.qrImagePath}
+                >
+                  <PaymentScreenshotPicker
+                    onImageSelected={setSelectedImage}
+                    selectedImage={selectedImage}
+                    isUploading={isUploading}
+                  />
+                </UpiPaymentPanel>
+                
+                <Button
+                  title={isUploading ? "Uploading..." : "Submit Payment Proof"}
+                  onPress={handleUploadProof}
+                  fullWidth
+                  size="lg"
+                  loading={isUploading}
+                  disabled={!selectedImage || isUploading}
+                  style={{ marginTop: Spacing.lg }}
+                />
+
+                <Button
+                  title="View Order Status"
+                  variant="ghost"
+                  fullWidth
+                  onPress={() => {
+                    // Navigate to confirmation even if proof wasn't submitted yet
+                    router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: createdOrderId } } as any);
+                  }}
+                  disabled={isUploading}
+                  style={{ marginTop: Spacing.sm }}
+                />
+              </View>
+            )}
+          </>
         )}
-      </View>
-
-      {/* Payment */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Payment Method</Text>
-        {[
-          { key: PaymentMethod.UPI, label: 'UPI', icon: 'phone-portrait-outline' as const }, 
-          { key: PaymentMethod.CARD, label: 'Debit/Credit Card', icon: 'card-outline' as const }, 
-          { key: PaymentMethod.CASH, label: 'Cash on Pickup', icon: 'cash-outline' as const }
-        ].map((p) => (
-          <TouchableOpacity key={p.key} style={[styles.payOption, payment === p.key && styles.payActive]} onPress={() => setPayment(p.key)}>
-            <Ionicons name={p.icon} size={20} color={payment === p.key ? Colors.primary : Colors.textSecondary} />
-            <Text style={[styles.payText, payment === p.key && styles.payTextActive]}>{p.label}</Text>
-            {payment === p.key && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} style={{ marginLeft: 'auto' }} />}
-          </TouchableOpacity>
-        ))}
-        {payment === PaymentMethod.CASH && (
-          <View style={{ marginTop: Spacing.sm, padding: Spacing.sm, backgroundColor: Colors.surfaceElevated, borderRadius: Radii.md }}>
-            <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, fontStyle: 'italic' }}>
-              Please pay at the {PICKUP_LOCATION} counter during pickup.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Total */}
-      <View style={styles.totalCard}>
-        <View style={styles.totalRow}><Text style={styles.totalLabel}>Subtotal</Text><Text style={styles.totalVal}>{formatCurrency(subtotal)}</Text></View>
-        <View style={styles.totalRow}><Text style={styles.totalLabel}>Tax</Text><Text style={styles.totalVal}>{formatCurrency(tax)}</Text></View>
-        <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
-          <Text style={styles.grandLabel}>Total</Text><Text style={styles.grandVal}>{formatCurrency(total)}</Text>
-        </View>
-        <View style={styles.pickupRow}>
-          <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} />
-          <View>
-            <Text style={styles.pickupLabel}>Pickup Location</Text>
-            <Text style={styles.cardValue}>{PICKUP_LOCATION}</Text>
-          </View>
-        </View>
-      </View>
-
-      <Button 
-        title={`Place Order • ${formatCurrency(total)}`} 
-        onPress={handlePlaceOrder} 
-        fullWidth 
-        size="lg" 
-        loading={isPlacing || isLoadingOp || isLoadingMeals || isLoadingInventory || isLoadingSub || isLoadingPlan} 
-        disabled={isPlacing || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingInventory || isLoadingSub || isLoadingPlan} 
-      />
-      {/* ─── END NORMAL CHECKOUT CONTENT ─── */}
-      </>
-      )}
+      </ScrollView>
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing.xl, marginBottom: Spacing.base },
-  title: { fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary },
-  card: { backgroundColor: Colors.surface, borderRadius: Radii.lg, padding: Spacing.base, marginBottom: Spacing.md, ...Shadows.sm },
-  cardTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.semiBold, color: Colors.textPrimary, marginBottom: Spacing.sm },
-  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  pickupLabel: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginBottom: 2 },
-  cardValue: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
-  itemRow: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Spacing.xl,
+    marginBottom: Spacing.base,
+  },
+  title: {
+    fontSize: Typography.size.lg,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    padding: Spacing.base,
+    marginBottom: Spacing.md,
+    ...Shadows.sm,
+  },
+  cardTitle: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  itemRow: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
   itemText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
-  itemPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
-  payOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.sm, borderRadius: Radii.sm, marginBottom: Spacing.xs },
+  itemPrice: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
+    color: Colors.textPrimary,
+  },
+  payOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radii.sm,
+    marginBottom: Spacing.xs,
+  },
   payActive: { backgroundColor: Colors.primaryBg },
   payText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
-  payTextActive: { color: Colors.primary, fontFamily: Typography.family.semiBold },
-  totalCard: { backgroundColor: Colors.surface, borderRadius: Radii.lg, padding: Spacing.base, marginBottom: Spacing.base, ...Shadows.sm },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  payTextActive: {
+    color: Colors.primary,
+    fontFamily: Typography.family.semiBold,
+  },
+  totalCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    padding: Spacing.base,
+    marginBottom: Spacing.base,
+    ...Shadows.sm,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: Spacing.xs,
+  },
   totalLabel: { fontSize: Typography.size.sm, color: Colors.textSecondary },
-  totalVal: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
-  grandLabel: { fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.textPrimary },
-  grandVal: { fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.primary },
-  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  chip: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: Radii.full, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.borderLight },
-  chipActive: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary },
-  chipText: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textSecondary },
+  totalVal: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
+    color: Colors.textPrimary,
+  },
+  grandLabel: {
+    fontSize: Typography.size.md,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  grandVal: {
+    fontSize: Typography.size.md,
+    fontFamily: Typography.family.bold,
+    color: Colors.primary,
+  },
+  chipContainer: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
+  chip: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  chipActive: {
+    backgroundColor: Colors.primaryBg,
+    borderColor: Colors.primary,
+  },
+  chipText: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
+    color: Colors.textSecondary,
+  },
   chipTextActive: { color: Colors.primary, fontFamily: Typography.family.bold },
-  // Holiday block
   holidayBlock: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: Spacing.xl, paddingBottom: Spacing['3xl'],
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing["3xl"],
   },
   holidayBlockTitle: {
-    fontSize: Typography.size.xl, fontFamily: Typography.family.bold,
-    color: Colors.textPrimary, marginTop: Spacing.lg, marginBottom: Spacing.xs, textAlign: 'center',
+    fontSize: Typography.size.xl,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xs,
+    textAlign: "center",
   },
   holidayBlockDate: {
-    fontSize: Typography.size.base, color: Colors.textSecondary,
-    fontFamily: Typography.family.medium, marginBottom: Spacing.xl, textAlign: 'center',
-  },
-  holidayBlockCard: {
-    width: '100%', backgroundColor: Colors.errorLight, borderRadius: Radii.xl,
-    padding: Spacing.lg, marginBottom: Spacing.xl,
-    borderWidth: 1, borderColor: Colors.error + '30',
-  },
-  holidayBlockLabel: {
-    fontSize: Typography.size.xs, color: Colors.error,
-    fontFamily: Typography.family.semiBold, textTransform: 'uppercase',
-    letterSpacing: 0.8, marginBottom: Spacing.xs,
-  },
-  holidayBlockValue: {
-    fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary,
-  },
-  holidayBlockHint: {
-    fontSize: Typography.size.sm, color: Colors.textSecondary,
-    textAlign: 'center', lineHeight: 20, fontFamily: Typography.family.medium,
+    fontSize: Typography.size.base,
+    color: Colors.textSecondary,
+    fontFamily: Typography.family.medium,
+    marginBottom: Spacing.xl,
+    textAlign: "center",
   },
 });
-

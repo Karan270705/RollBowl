@@ -4,12 +4,13 @@ import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
 import { StatusBadge, EmptyState, LoadingSpinner } from '@/src/components/ui';
+import { PaymentStatusBadge } from '@/src/components/payments/PaymentStatusBadge';
 import { StickyCartBar } from '@/src/components/shared';
 import { useUser } from '@/src/store';
 import { useUserOrders } from '@/src/hooks';
 import { formatCurrency, formatRelativeTime } from '@/src/utils/formatters';
 import type { Order } from '@/src/types/models';
-import { OrderStatus } from '@/src/constants/enums';
+import { OrderStatus, PaymentMethod } from '@/src/constants/enums';
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -90,7 +91,12 @@ export default function OrdersScreen() {
         {order.items.map((i) => `${i.quantity}x ${i.mealName}`).join(', ')}
       </Text>
       <View style={styles.orderFooter}>
-        <Text style={styles.total}>{formatCurrency(order.total)}</Text>
+        <View>
+          <Text style={styles.total}>{formatCurrency(order.total)}</Text>
+          {order.paymentMethod === PaymentMethod.UPI && (
+            <PaymentStatusBadge status={order.paymentVerificationStatus} style={{ marginTop: Spacing.xs }} />
+          )}
+        </View>
         <Text style={styles.time}>{formatRelativeTime(order.createdAt)}</Text>
       </View>
     </TouchableOpacity>

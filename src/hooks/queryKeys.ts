@@ -30,5 +30,13 @@ export const queryKeys = {
   holidays: {
     all: () => ['holidays', 'all'] as const,
     active: (dateString: string) => ['holidays', 'active', dateString] as const,
+  },
+  payments: {
+    settings: (stallId: string) => ['payments', 'settings', stallId] as const,
+    proof: (orderId: string) => ['payments', 'proof', orderId] as const,
+  },
+  subscriptionRequests: {
+    list: (userId: string) => ['subscriptionRequests', 'list', userId] as const,
+    detail: (requestId: string) => ['subscriptionRequests', 'detail', requestId] as const,
   }
 } as const;

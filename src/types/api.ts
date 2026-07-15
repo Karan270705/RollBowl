@@ -54,7 +54,7 @@ export interface OtpVerifyRequest {
 
 export interface CreateOrderRequest {
   stallId: string;
-  items: { mealId: string; quantity: number; specialInstructions?: string }[];
+  items: { mealId: string; quantity: number; specialInstructions?: string; useSubscription?: boolean }[];
   orderType: import('@/src/constants/enums').OrderType;
   notes?: string;
 }
@@ -68,4 +68,23 @@ export interface ReserveMealRequest {
 export interface AvailabilityResponse {
   items: import('./models').InventoryItem[];
   lastUpdated: string;
+}
+
+export interface SubmitPaymentProofRequest {
+  orderId: string;
+  screenshotPath: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface SubmitSubscriptionPaymentProofRequest {
+  requestId: string;
+  screenshotPath: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface CreateSubscriptionPurchaseRequest {
+  stallId: string;
+  planId: string;
 }

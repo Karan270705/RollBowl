@@ -67,7 +67,11 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   if (prominent) {
     return (
       <TouchableOpacity style={styles.prominentCard} onPress={onPress} activeOpacity={0.8}>
-        <Image source={{ uri: meal.imageUrl }} style={styles.prominentImage} />
+        {meal.imageUrl ? (
+          <Image source={{ uri: meal.imageUrl }} style={styles.prominentImage} />
+        ) : (
+          <View style={styles.prominentImage} />
+        )}
         <View style={styles.prominentInfo}>
           <View style={styles.row}>
             <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
@@ -94,7 +98,11 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   if (compact) {
     return (
       <TouchableOpacity style={styles.compactCard} onPress={onPress} activeOpacity={0.7}>
-        <Image source={{ uri: meal.imageUrl }} style={[styles.compactImage, unavailable && styles.unavailableImage]} />
+        {meal.imageUrl ? (
+          <Image source={{ uri: meal.imageUrl }} style={[styles.compactImage, unavailable && styles.unavailableImage]} />
+        ) : (
+          <View style={[styles.compactImage, unavailable && styles.unavailableImage]} />
+        )}
         <View style={styles.compactInfo}>
           <Text style={[styles.compactName, unavailable && styles.unavailableText]} numberOfLines={1}>{meal.name}</Text>
           <View style={styles.compactPriceRow}>
@@ -108,7 +116,11 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
 
   return (
     <TouchableOpacity style={[styles.card, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
-      <Image source={{ uri: meal.imageUrl }} style={[styles.image, unavailable && styles.unavailableImage]} />
+      {meal.imageUrl ? (
+        <Image source={{ uri: meal.imageUrl }} style={[styles.image, unavailable && styles.unavailableImage]} />
+      ) : (
+        <View style={[styles.image, unavailable && styles.unavailableImage]} />
+      )}
       {/* Unavailable overlay badge */}
       {unavailable && (
         <View style={styles.unavailableBadge}>
