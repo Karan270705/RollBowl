@@ -261,17 +261,48 @@ export async function fetchPaymentProofForSubscriptionRequest(requestId: string)
   };
 }
 
+const signedUrlCache = new Map<string, { url: string; expiresAt: number; promise?: Promise<{ signedUrl: string; expiresIn: number }> }>();
+
 export async function createPaymentProofSignedUrl(screenshotPath: string): Promise<{ signedUrl: string; expiresIn: number }> {
-  const { data, error } = await supabase.storage
-    .from('payment-proofs')
-    .createSignedUrl(screenshotPath, 120); // 120 seconds expiry
+  const now = Date.now();
+  const cached = signedUrlCache.get(screenshotPath);
 
-  if (error) throw error;
-  if (!data || !data.signedUrl) throw new Error('SIGNED_URL_FAILED');
+  if (cached) {
+    if (cached.expiresAt > now) {
+      return { signedUrl: cached.url, expiresIn: Math.floor((cached.expiresAt - now) / 1000) };
+    }
+    if (cached.promise) {
+      return cached.promise;
+    }
+  }
 
-  return {
-    signedUrl: data.signedUrl,
-    expiresIn: 120,
-  };
+  const fetchPromise = (async () => {
+    const { data, error } = await supabase.storage
+      .from('payment-proofs')
+      .createSignedUrl(screenshotPath, 120); // 120 seconds expiry
+
+    if (error) throw error;
+    if (!data || !data.signedUrl) throw new Error('SIGNED_URL_FAILED');
+
+    // Cache until shortly before expiry (e.g. 10 seconds before)
+    signedUrlCache.set(screenshotPath, {
+      url: data.signedUrl,
+      expiresAt: now + (120 - 10) * 1000,
+    });
+
+    return {
+      signedUrl: data.signedUrl,
+      expiresIn: 120,
+    };
+  })();
+
+  signedUrlCache.set(screenshotPath, { url: '', expiresAt: 0, promise: fetchPromise });
+
+  try {
+    return await fetchPromise;
+  } catch (err) {
+    signedUrlCache.delete(screenshotPath);
+    throw err;
+  }
 }
 

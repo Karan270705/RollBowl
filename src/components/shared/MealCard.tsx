@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { MealType } from '@/src/constants/enums';
@@ -29,9 +30,9 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   const unavailable = !isOperationallyAvailable || !isInventoryAvailable;
 
   let unavailableText = 'Not Available';
-  if (isOrderable === false) unavailableText = 'Not Available Today';
-  else if (inventoryStatus === 'not_in_batch') unavailableText = 'Not on Menu Today';
-  else if (inventoryStatus === 'out_of_stock') unavailableText = 'Sold Out';
+  if (inventoryStatus === 'out_of_stock') unavailableText = 'Sold Out';
+  else if (inventoryStatus === 'not_in_batch') unavailableText = 'Not loaded in live stock';
+  else if (isOrderable === false) unavailableText = 'Not Available Today';
 
   const renderInventoryBadge = () => {
     if (unavailable) return null;
@@ -46,8 +47,8 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
     
     if (inventoryStatus === 'available' && availableQuantity !== undefined) {
       return (
-        <View style={styles.tagContainer}>
-          <Text style={styles.tag}>{availableQuantity} Available</Text>
+        <View style={[styles.tagContainer, { backgroundColor: Colors.success }]}>
+          <Text style={styles.tag}>{availableQuantity > 5 ? 'In stock' : `Only ${availableQuantity} left`}</Text>
         </View>
       );
     }
@@ -66,24 +67,42 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   // ─── Prominent variant (Today's Menu hero cards) ─────────
   if (prominent) {
     return (
-      <TouchableOpacity style={styles.prominentCard} onPress={onPress} activeOpacity={0.8}>
+      <TouchableOpacity style={[styles.prominentCard, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
         {meal.imageUrl ? (
-          <Image source={{ uri: meal.imageUrl }} style={styles.prominentImage} />
+          <Image 
+            source={{ uri: meal.imageUrl }} 
+            style={[styles.prominentImage, unavailable && styles.unavailableImage]} 
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            recyclingKey={meal.id}
+          />
         ) : (
-          <View style={styles.prominentImage} />
+          <View style={[styles.prominentImage, unavailable && styles.unavailableImage]} />
+        )}
+        {unavailable && (
+          <View style={styles.unavailableBadge}>
+            <Text style={styles.unavailableBadgeText}>{unavailableText}</Text>
+          </View>
+        )}
+        {renderInventoryBadge() || (
+          !unavailable && meal.tags.length > 0 && (
+            <View style={[styles.tagContainer, { backgroundColor: Colors.primary }]}>
+              <Text style={styles.tag}>{meal.tags[0]}</Text>
+            </View>
+          )
         )}
         <View style={styles.prominentInfo}>
           <View style={styles.row}>
             <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
-            <Text style={styles.prominentName} numberOfLines={1}>{meal.name}</Text>
+            <Text style={[styles.prominentName, unavailable && styles.unavailableText]} numberOfLines={1}>{meal.name}</Text>
           </View>
-          <Text style={styles.prominentDesc} numberOfLines={2}>{meal.description}</Text>
+          <Text style={[styles.prominentDesc, unavailable && styles.unavailableText]} numberOfLines={2}>{meal.description}</Text>
           <View style={styles.prominentFooter}>
             <View>
-              <Text style={styles.prominentPrice}>{formatCurrency(meal.price)}</Text>
+              <Text style={[styles.prominentPrice, unavailable && styles.unavailableText]}>{formatCurrency(meal.price)}</Text>
               {meal.servingSize && <Text style={styles.prominentServing}>{meal.servingSize}</Text>}
             </View>
-            {onAddToCart && (
+            {!unavailable && onAddToCart && (
               <TouchableOpacity style={styles.prominentAddBtn} onPress={onAddToCart} activeOpacity={0.7}>
                 <Ionicons name="add" size={18} color={Colors.white} />
                 <Text style={styles.prominentAddText}>Add</Text>
@@ -99,7 +118,13 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
     return (
       <TouchableOpacity style={styles.compactCard} onPress={onPress} activeOpacity={0.7}>
         {meal.imageUrl ? (
-          <Image source={{ uri: meal.imageUrl }} style={[styles.compactImage, unavailable && styles.unavailableImage]} />
+          <Image 
+            source={{ uri: meal.imageUrl }} 
+            style={[styles.compactImage, unavailable && styles.unavailableImage]}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            recyclingKey={meal.id}
+          />
         ) : (
           <View style={[styles.compactImage, unavailable && styles.unavailableImage]} />
         )}
@@ -117,7 +142,13 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
   return (
     <TouchableOpacity style={[styles.card, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
       {meal.imageUrl ? (
-        <Image source={{ uri: meal.imageUrl }} style={[styles.image, unavailable && styles.unavailableImage]} />
+        <Image 
+          source={{ uri: meal.imageUrl }} 
+          style={[styles.image, unavailable && styles.unavailableImage]}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          recyclingKey={meal.id}
+        />
       ) : (
         <View style={[styles.image, unavailable && styles.unavailableImage]} />
       )}

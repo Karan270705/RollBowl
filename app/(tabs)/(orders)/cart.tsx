@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -45,11 +46,13 @@ export default function CartScreen() {
 
       {items.map((item) => (
         <View key={item.meal.id} style={styles.cartItem}>
-          {item.meal.imageUrl ? (
-            <Image source={{ uri: item.meal.imageUrl }} style={styles.itemImage} />
-          ) : (
-            <View style={styles.itemImage} />
-          )}
+          <Image 
+            source={{ uri: item.meal.imageUrl }} 
+            style={styles.itemImage} 
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            recyclingKey={item.meal.id}
+          />
           <View style={styles.itemInfo}>
             <Text style={styles.itemName} numberOfLines={1}>{item.meal.name}</Text>
             <Text style={styles.itemPrice}>{formatCurrency(item.meal.price)}</Text>

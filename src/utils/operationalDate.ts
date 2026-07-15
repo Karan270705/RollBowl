@@ -1,4 +1,5 @@
 import { supabase } from '@/src/lib/supabase';
+import { AppConfig } from '@/src/constants/config';
 
 export async function getPrimaryStallId(): Promise<string> {
   const { data, error } = await supabase
@@ -21,17 +22,26 @@ export function getCurrentISTTime(): Date {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
 }
 
-// Helper to construct a Date object from a date string ('YYYY-MM-DD') and time string ('HH:mm:ss') in IST
-export function parseTimeToDateIST(dateStr: string, timeStr: string): Date {
-  // Pad the time to HH:mm:ss if necessary
-  const timeParts = timeStr.split(':');
-  const paddedTimeStr = [
-    timeParts[0]?.padStart(2, '0') || '00',
-    timeParts[1]?.padStart(2, '0') || '00',
-    timeParts[2]?.padStart(2, '0') || '00'
-  ].join(':');
-  
-  return new Date(`${dateStr}T${paddedTimeStr}+05:30`);
+export function parseTimeToDateIST(
+  dateString: string,
+  timeString: string
+): Date {
+  const normalizedTime =
+    timeString.length === 5
+      ? `${timeString}:00`
+      : timeString;
+
+  const result = new Date(
+    `${dateString}T${normalizedTime}+05:30`
+  );
+
+  if (Number.isNaN(result.getTime())) {
+    throw new Error(
+      `Invalid IST date/time: ${dateString} ${timeString}`
+    );
+  }
+
+  return result;
 }
 
 export interface OperationalContextResult {
@@ -79,7 +89,7 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
       activeBatchDate,
       windowStart,
       windowEnd,
-      phase,
+      phase: 'RESOLVING',
       isResolving: false,
     };
     console.log(JSON.stringify(result, null, 2));
@@ -109,7 +119,7 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
     const nonExpiredBatch = todayBatches.find(b => {
       const endTime = parseTimeToDateIST(b.inventory_date, b.window_end);
       endTime.setMinutes(endTime.getMinutes() + 60); // 60 mins grace period
-      return currentIST <= endTime;
+      return Date.now() <= endTime.getTime();
     });
 
     if (nonExpiredBatch) {
@@ -129,7 +139,7 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
   if (todayMenu) {
     const menuEndTime = parseTimeToDateIST(calendarDate, '14:00:00'); // default 14:00
     menuEndTime.setMinutes(menuEndTime.getMinutes() + 60);
-    if (currentIST <= menuEndTime) {
+    if (Date.now() <= menuEndTime.getTime()) {
       return defaultResult(calendarDate, 'Published menu found for today and not expired', 'ORDERING_OPEN');
     }
   }
@@ -161,17 +171,18 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
   }
   
   if (nextDate) {
-    return defaultResult(nextDate, 'Next scheduled menu/batch date found', 'ORDERING_CLOSED');
+    return defaultResult(nextDate, 'Next scheduled menu/batch date found', 'RESOLVING');
   }
 
-  // 6. Fallback logic: roll over to tomorrow if past 14:00
-  const fallbackCutoff = parseTimeToDateIST(calendarDate, '14:00:00');
-  if (currentIST > fallbackCutoff) {
-    const tomorrow = new Date(currentIST);
+  // 6. Fallback logic: roll over to tomorrow if past fallback cutoff
+  const fallbackCutoff = parseTimeToDateIST(calendarDate, AppConfig.BUSINESS.ORDER_CUTOFF_TIME);
+  if (Date.now() > fallbackCutoff.getTime()) {
+    const tomorrow = new Date(Date.now());
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    return defaultResult(tomorrowStr, 'Past 14:00 fallback', 'ORDERING_CLOSED');
+    
+    return defaultResult(tomorrowStr, 'Past cutoff fallback', 'RESOLVING');
   }
 
-  return defaultResult(calendarDate, 'Before 14:00 fallback', 'ORDERING_CLOSED');
+  return defaultResult(calendarDate, 'Before cutoff fallback', 'RESOLVING');
 }

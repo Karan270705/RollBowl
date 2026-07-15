@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -69,13 +70,23 @@ export default function MealDetailScreen() {
   const invStatus = hasActiveBatch && invItem ? invItem.stock_status : (hasActiveBatch ? 'not_in_batch' : 'pending');
   const availableQty = invItem ? invItem.customer_available : 99;
 
-  const isOrderable = opFacts?.canPlaceOrders && isScheduled && invStatus !== 'out_of_stock' && invStatus !== 'not_in_batch';
+  const canOrder = 
+    opFacts?.status === "ORDERING_OPEN" && 
+    opFacts?.isPrepTime !== true && 
+    opFacts?.activeMenu?.is_published === true;
+
+  const isOrderable = canOrder && isScheduled && invStatus !== 'out_of_stock';
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {meal.imageUrl ? (
-          <Image source={{ uri: meal.imageUrl }} style={styles.image} />
+          <Image 
+            source={{ uri: meal.imageUrl }} 
+            style={styles.image} 
+            cachePolicy="memory-disk"
+            contentFit="cover"
+          />
         ) : (
           <View style={styles.image} />
         )}
@@ -115,7 +126,7 @@ export default function MealDetailScreen() {
               <Text style={styles.unavailableBannerText}>
                 {opFacts?.isHoliday
                   ? `Kitchen closed for: ${opFacts.holidayDetails?.title || 'a holiday'}`
-                  : !isScheduled || invStatus === 'not_in_batch'
+                  : !isScheduled
                   ? `Not available for ${opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'upcoming dates'}`
                   : invStatus === 'out_of_stock'
                   ? 'Sold Out for today'
@@ -187,7 +198,7 @@ export default function MealDetailScreen() {
         <View style={styles.bottomBarDisabled}>
           <Ionicons name="close-circle-outline" size={22} color={Colors.textTertiary} />
           <Text style={styles.disabledText}>
-            {!isScheduled || invStatus === 'not_in_batch' 
+            {!isScheduled 
               ? `This item is not available for ${opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'upcoming dates'}` 
               : invStatus === 'out_of_stock' 
               ? 'Sold Out'

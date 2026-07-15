@@ -44,7 +44,9 @@ export const resetPassword = async (email: string) => {
     redirectTo: redirectUrl,
   });
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 };
 
 

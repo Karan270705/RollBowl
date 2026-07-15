@@ -85,16 +85,41 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
   const pickupStart = setTimeOnDate(operationalDate, AppConfig.BUSINESS.PICKUP_START_TIME);
   const pickupEndForOp = setTimeOnDate(operationalDate, AppConfig.BUSINESS.PICKUP_END_TIME);
 
-  const canPlaceOrders = now <= orderCutoff;
-  const isPrepTime = now > orderCutoff && now < pickupStart;
-  const pickupWindowOpen = now >= pickupStart && now <= pickupEndForOp;
+  const nowMs = Date.now();
+  const orderCutoffMs = orderCutoff.getTime();
+  const pickupStartMs = pickupStart.getTime();
+  const pickupEndMs = pickupEndForOp.getTime();
+
+  const isBeforeOrAtCutoff = Number.isFinite(orderCutoffMs) && nowMs <= orderCutoffMs;
+  const isPrepTime = Number.isFinite(orderCutoffMs) && Number.isFinite(pickupStartMs) && nowMs > orderCutoffMs && nowMs < pickupStartMs;
+  const pickupWindowOpen = Number.isFinite(pickupStartMs) && Number.isFinite(pickupEndMs) && nowMs >= pickupStartMs && nowMs <= pickupEndMs;
 
   let status: OperationalStatus = 'ORDERING_CLOSED';
-  if (canPlaceOrders) {
+  if (isBeforeOrAtCutoff) {
     status = 'ORDERING_OPEN';
   } else if (pickupWindowOpen) {
     status = 'PICKUP_ACTIVE';
   }
+
+  const canPlaceOrders = isBeforeOrAtCutoff;
+
+  if (!isBeforeOrAtCutoff && status !== 'ORDERING_OPEN') {
+    console.error('[ORDER STATUS BUG] Before cutoff but status is closed', {
+      now: new Date(nowMs).toISOString(),
+      cutoff: new Date(orderCutoffMs).toISOString(),
+      status,
+    });
+  }
+
+  console.log('[ORDER COMPARISON]', {
+    nowISO: new Date(nowMs).toISOString(),
+    cutoffISO: new Date(orderCutoffMs).toISOString(),
+    nowMs,
+    orderCutoffMs,
+    differenceMinutes: (orderCutoffMs - nowMs) / 60000,
+    isBeforeOrAtCutoff,
+    status,
+  });
 
   return {
     operationalDate,

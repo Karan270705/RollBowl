@@ -6,9 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii } from '@/src/constants/theme';
 import {
@@ -157,7 +157,7 @@ export const CustomerPaymentProofModal: React.FC<CustomerPaymentProofModalProps>
               <Image
                 source={{ uri: signedUrlData.signedUrl }}
                 style={styles.screenshot}
-                resizeMode="contain"
+                contentFit="contain"
                 onError={() => setImageError(true)}
               />
             ) : (

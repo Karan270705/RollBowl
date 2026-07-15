@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -7,8 +7,10 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
+import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory, useOperationalContext } from '@/src/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 import { getGreeting, formatFriendlyDate, formatTimeSlot } from '@/src/utils/formatters';
+import { usePrimaryStallId } from '@/src/hooks/usePrimaryStallId';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -16,8 +18,15 @@ export default function HomeScreen() {
   const addItem = useCartStore((state) => state.addItem);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.invalidateQueries();
+  }, []);
 
   // ─── Operational Engine ─────────────────────────────────────────
+  const { data: primaryStallId } = usePrimaryStallId();
+  const operationalContext = useOperationalContext(primaryStallId);
   const { data: opFacts, isLoading: isLoadingOp, isError, error, refetch } = useOperationalWindow();
   
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
@@ -26,20 +35,38 @@ export default function HomeScreen() {
   const stallId = opFacts?.activeMenu?.stall_id;
   const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
 
+  const { data: allMeals = [] } = useAllMeals();
+
   const isLoading = isLoadingOp || isLoadingMeals || isLoadingInventory;
+
+  // Active batch / mode resolution
+  const activeBatch = inventory.find(
+    (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === opFacts?.operationalDate
+  );
+  const activeBatchId = activeBatch ? activeBatch.batch_id : null;
+  const orderMode = activeBatchId ? 'LIVE_INVENTORY' : 'PREORDER';
+
+  const inventoryByMealId = useMemo(() => {
+    return new Map(inventory.map(item => [item.meal_id, item]));
+  }, [inventory]);
 
   // Helper to get inventory status for a meal
   const getInventoryInfo = (mealId: string) => {
-    // If no active inventory batches exist, it returns empty array -> fallback to 'pending' (preorder logic)
-    if (!inventory || inventory.length === 0) return { status: 'pending' as const, quantity: undefined };
+    if (orderMode !== 'LIVE_INVENTORY') {
+      return { status: 'pending' as const, quantity: undefined };
+    }
     
-    const item = inventory.find(i => i.meal_id === mealId);
-    if (!item) return { status: 'not_in_batch' as const, quantity: 0 };
-    return { status: item.stock_status, quantity: item.customer_available };
+    const item = inventoryByMealId.get(mealId);
+    if (!item) {
+      return { status: 'not_in_batch' as const, quantity: 0 };
+    }
+    return { 
+      status: item.stock_status, 
+      quantity: item.customer_available 
+    };
   };
 
   // ─── Browse Catalog ───────────────────────────────────────
-  const { data: allMeals = [] } = useAllMeals();
 
   const filteredCatalog = useMemo(() => {
     return allMeals.filter((m) => {
@@ -160,12 +187,34 @@ export default function HomeScreen() {
   }
 
   // ─── Compute Banner Status ────────────────────────────────
+  const canOrder = 
+    opFacts?.activeMenu?.is_published === true &&
+    opFacts?.status === "ORDERING_OPEN" && 
+    opFacts?.isPrepTime !== true;
+
+  const orderStateFinal = {
+    nowISO: new Date().toISOString(),
+    resolvedDate: operationalContext?.resolvedOperationalDate,
+    contextPhase: operationalContext?.phase,
+    opFactsStatus: opFacts?.status,
+    isPrepTime: opFacts?.isPrepTime,
+    orderCutoff: opFacts?.activeMenu?.order_cutoff,
+    menuDate: opFacts?.activeMenu?.menu_date,
+    menuPublished: Boolean(opFacts?.activeMenu?.is_published),
+    inventoryLength: inventory?.length ?? 0,
+    activeBatchId,
+    orderMode,
+    canOrder,
+  };
+
+  console.log("[ORDER STATE FINAL]", JSON.stringify(orderStateFinal, null, 2));
+
   let statusTitle = '';
   let statusSubtitle = '';
   let statusColor: string = Colors.primary;
   let statusIcon: React.ComponentProps<typeof Ionicons>['name'] = 'time-outline';
 
-  if (opFacts.status === 'ORDERING_OPEN') {
+  if (canOrder) {
     statusTitle = `Menu Available`;
     statusSubtitle = `Place your order before the cutoff.`;
     statusColor = Colors.success;
@@ -186,9 +235,8 @@ export default function HomeScreen() {
     statusSubtitle = 'Ordering is currently closed.';
   }
 
-  // ─── Normal States ────────────────────────────────────────
-  return (
-    <ScreenWrapper>
+  const renderHeader = () => (
+    <>
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -203,7 +251,7 @@ export default function HomeScreen() {
       {/* Store Status Banner */}
       <View style={[
         styles.statusBanner,
-        { backgroundColor: opFacts.canPlaceOrders ? Colors.successLight : Colors.primaryBg }
+        { backgroundColor: canOrder ? Colors.successLight : Colors.primaryBg }
       ]}>
         <Ionicons name={statusIcon} size={24} color={statusColor} />
         <View style={styles.statusInfo}>
@@ -224,15 +272,27 @@ export default function HomeScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
             {availableMeals.map((meal) => {
               const inv = getInventoryInfo(meal.id);
-              const isOrderable = opFacts.canPlaceOrders && inv.status !== 'out_of_stock' && inv.status !== 'not_in_batch';
+              const isItemOrderable = canOrder && inv.status !== 'out_of_stock';
+              
+              const handleAdd = isItemOrderable ? () => {
+                if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
+                  const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
+                  if (currentQty >= inv.quantity) {
+                    alert(`Only ${inv.quantity} available.`);
+                    return;
+                  }
+                }
+                addItem(meal, 1);
+              } : undefined;
+
               return (
                 <MealCard
                   key={meal.id}
                   meal={meal}
                   prominent
                   onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                  onAddToCart={isOrderable ? () => addItem(meal, 1) : undefined}
-                  isOrderable={opFacts.canPlaceOrders}
+                  onAddToCart={handleAdd}
+                  isOrderable={isItemOrderable}
                   inventoryStatus={inv.status}
                   availableQuantity={inv.quantity}
                 />
@@ -245,37 +305,65 @@ export default function HomeScreen() {
       {/* ─── Section: Browse Catalog ─── */}
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search the catalog..." />
       <CategoryPills selected={selectedCategory} onSelect={setSelectedCategory} />
-      <Section title="Browse Catalog">
-        {filteredCatalog.length === 0 ? (
-          <EmptyState
-            icon="restaurant-outline"
-            title="No items found"
-            subtitle={
-              search.trim()
-                ? `No results for "${search}". Try a different search.`
-                : 'No items in this category.'
-            }
-          />
-        ) : (
-          filteredCatalog.map((meal) => {
-            const isScheduled = availableMeals.some(m => m.id === meal.id);
-            const isOrderable = opFacts.canPlaceOrders && isScheduled;
-            const inv = getInventoryInfo(meal.id);
-            const isActuallyOrderable = isOrderable && inv.status !== 'out_of_stock' && inv.status !== 'not_in_batch';
-            return (
-              <MealCard
-                key={meal.id}
-                meal={meal}
-                onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                onAddToCart={isActuallyOrderable ? () => addItem(meal, 1) : undefined}
-                isOrderable={isOrderable}
-                inventoryStatus={inv.status}
-                availableQuantity={inv.quantity}
-              />
-            );
-          })
-        )}
-      </Section>
+      
+      <Text style={styles.catalogTitle}>Browse Catalog</Text>
+      
+      {filteredCatalog.length === 0 && (
+        <EmptyState
+          icon="restaurant-outline"
+          title="No items found"
+          subtitle={
+            search.trim()
+              ? `No results for "${search}". Try a different search.`
+              : 'No items in this category.'
+          }
+        />
+      )}
+    </>
+  );
+
+  const renderMealItem = ({ item: meal }: { item: any }) => {
+    const isScheduled = availableMeals.some(m => m.id === meal.id);
+    const inv = getInventoryInfo(meal.id);
+    const isItemOrderable = canOrder && isScheduled && inv.status !== 'out_of_stock';
+    
+    const handleAdd = isItemOrderable ? () => {
+      if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
+        const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
+        if (currentQty >= inv.quantity) {
+          alert(`Only ${inv.quantity} available.`);
+          return;
+        }
+      }
+      addItem(meal, 1);
+    } : undefined;
+
+    return (
+      <MealCard
+        meal={meal}
+        onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
+        onAddToCart={handleAdd}
+        isOrderable={isItemOrderable}
+        inventoryStatus={inv.status}
+        availableQuantity={inv.quantity}
+      />
+    );
+  };
+
+  // ─── Normal States ────────────────────────────────────────
+  return (
+    <ScreenWrapper scroll={false}>
+      <FlatList
+        data={filteredCatalog}
+        keyExtractor={(meal) => meal.id}
+        renderItem={renderMealItem}
+        ListHeaderComponent={renderHeader}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        contentContainerStyle={{ paddingBottom: Spacing.xl }}
+      />
     </ScreenWrapper>
   );
 }
@@ -349,5 +437,11 @@ const styles = StyleSheet.create({
     fontFamily: Typography.family.medium,
     fontSize: Typography.size.sm,
     color: Colors.textSecondary,
+  },
+  catalogTitle: {
+    fontSize: Typography.size.lg,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
   },
 });

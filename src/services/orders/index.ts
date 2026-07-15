@@ -160,7 +160,8 @@ export async function placeOrder(
   expectedPickupSlot: string,
   paymentMethod: import('@/src/constants/enums').PaymentMethod,
   subscriptionId?: string,
-  notes?: string
+  notes?: string,
+  inventoryBatchId?: string | null
 ): Promise<Order> {
   // SERVER-SIDE OPERATIONAL VALIDATION
   const opFacts = await resolveOperationalFacts(stallId, pickupDate);
@@ -191,6 +192,7 @@ export async function placeOrder(
     paymentMethod,
     notes,
     subscriptionId,
+    inventoryBatchId,
   };
 
   const { data: result, error: rpcError } = await supabase.rpc('place_order', {

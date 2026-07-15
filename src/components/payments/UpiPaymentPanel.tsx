@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { Colors, Radii, Spacing, Typography } from '@/src/constants/theme';
@@ -24,7 +25,7 @@ export function UpiPaymentPanel({ amount, recipientName, upiId, qrImagePath, chi
   const [qrImageFailed, setQrImageFailed] = useState(false);
 
   const hasImageQr = qrImagePath && qrImagePath.trim().length > 0 && !qrImagePath.startsWith('http');
-  const qrUrl = hasImageQr ? getPaymentQrPublicUrl(qrImagePath as string) : null;
+  const qrUrl = useMemo(() => hasImageQr ? getPaymentQrPublicUrl(qrImagePath as string) : null, [hasImageQr, qrImagePath]);
   const showImageQr = hasImageQr && !!qrUrl && !qrImageFailed;
   const generatedFallback = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(recipientName)}&am=${amount}&cu=INR`;
 
@@ -41,7 +42,8 @@ export function UpiPaymentPanel({ amount, recipientName, upiId, qrImagePath, chi
           <Image 
             source={{ uri: qrUrl as string }} 
             style={styles.qrImage} 
-            resizeMode="contain" 
+            contentFit="contain"
+            cachePolicy="disk"
             accessibilityLabel="Payment QR Code"
             onError={() => setQrImageFailed(true)}
           />

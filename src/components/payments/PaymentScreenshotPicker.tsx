@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,7 +81,7 @@ export function PaymentScreenshotPicker({ onImageSelected, selectedImage, isUplo
     return (
       <View style={styles.container}>
         {selectedImage.uri ? (
-          <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} resizeMode="contain" />
+          <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} contentFit="contain" />
         ) : (
           <View style={styles.previewImage} />
         )}

@@ -4,6 +4,7 @@ export { useUserOrders, useOrder } from './useOrders';
 
 export * from './useHolidays';
 export * from './useOperationalWindow';
+export * from './useOperationalContext';
 export { queryKeys } from './queryKeys';
 export { useActiveSubscription, useSubscriptionPlan, useSubscriptionPlans, usePurchaseSubscription, useSubscriptionUsageHistory } from './useSubscriptions';
 export { useNotifications, useMarkAllNotificationsAsRead, useMarkNotificationAsRead } from './useNotifications';

@@ -24,6 +24,7 @@ import { formatCurrency, formatFriendlyDate } from "@/src/utils/formatters";
 import { processSubscription } from "@/src/utils/subscriptionEngine";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/src/lib/supabase";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
@@ -61,6 +62,19 @@ export default function CheckoutScreen() {
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
 
+  // Active Batch resolution
+  const activeBatch = inventory.find(
+    (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === opFacts?.operationalDate
+  );
+  const activeBatchId = activeBatch ? activeBatch.batch_id : null;
+  const orderMode = activeBatchId ? 'LIVE_INVENTORY' : 'PREORDER';
+
+  console.log('[CHECKOUT INVENTORY CONTEXT]', {
+    resolvedDate: opFacts?.operationalDate,
+    activeBatchId,
+    inventoryLength: inventory.length
+  });
+
   // Engine logic
   const engineResult = processSubscription(
     items,
@@ -76,10 +90,15 @@ export default function CheckoutScreen() {
 
   const displayTotal = backendTotal !== null ? backendTotal : frontendTotal;
 
+  const canOrder = 
+    opFacts?.status === "ORDERING_OPEN" && 
+    opFacts?.isPrepTime !== true && 
+    opFacts?.activeMenu?.is_published === true;
+
   const handlePlaceOrderClick = async () => {
     if (!user || items.length === 0) return;
 
-    if (!opFacts?.canPlaceOrders || !opFacts.operationalDate) {
+    if (!canOrder || !opFacts?.operationalDate) {
       alert("Ordering is currently closed or cannot determine date.");
       return;
     }
@@ -91,14 +110,29 @@ export default function CheckoutScreen() {
       return;
     }
 
-    if (inventory && inventory.length > 0) {
+    if (orderMode === 'LIVE_INVENTORY') {
+      // Pre-submit cart validation
+      const { data: latestInventory, error: fetchError } = await supabase
+        .from("customer_safe_inventory")
+        .select("*")
+        .eq("stall_id", stallId)
+        .eq("inventory_date", opFacts.operationalDate);
+
+      const currentActiveBatch = latestInventory?.find((b: any) => b.batch_status === 'active');
+      
+      if (fetchError || !currentActiveBatch || currentActiveBatch.batch_id !== activeBatchId) {
+        alert("Stock changed while you were checking out. Please review your cart.");
+        return;
+      }
+
       const overLimit = items.filter((cartItem) => {
-        const invItem = inventory.find((i) => i.meal_id === cartItem.meal.id);
+        const invItem = latestInventory.find((i: any) => i.meal_id === cartItem.meal.id);
         if (!invItem) return true;
         return cartItem.quantity > invItem.customer_available;
       });
+
       if (overLimit.length > 0) {
-        alert("Some items exceed available stock.");
+        alert("Stock changed while you were checking out. Please review your cart.");
         return;
       }
     }
@@ -113,6 +147,14 @@ export default function CheckoutScreen() {
 
       const appliedSubscriptionId = (engineResult.subscriptionUpdates && subscription) ? subscription.id : undefined;
 
+      console.log('[PLACE ORDER PAYLOAD]', {
+        pickupDate: opFacts.operationalDate,
+        inventoryBatchId: activeBatchId,
+        itemCount: engineResult.processedItems.length,
+        paymentMethod: resolvedPaymentMethod,
+        pickupSlot
+      });
+
       const newOrder = await placeOrder(
         user.id,
         orderStallId,
@@ -121,7 +163,8 @@ export default function CheckoutScreen() {
         pickupSlot,
         resolvedPaymentMethod,
         appliedSubscriptionId,
-        undefined
+        undefined,
+        activeBatchId
       );
 
       setCreatedOrderId(newOrder.id);
@@ -140,10 +183,32 @@ export default function CheckoutScreen() {
         setCheckoutState('idle');
         router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      const parsed = parsePaymentBackendError(error);
-      alert(parsed.message);
+      
+      let displayMessage = "An error occurred placing your order.";
+      
+      try {
+        if (error.message) {
+          const parsed = JSON.parse(error.message);
+          if (parsed.code === 'BATCH_REQUIRED') {
+            displayMessage = "We found live inventory for this pickup date but could not attach it to your order. Please retry.";
+          } else if (parsed.code) {
+            displayMessage = "Live inventory changed. Please refresh and try again.";
+          } else {
+             const paymentErr = parsePaymentBackendError(error);
+             displayMessage = paymentErr.message;
+          }
+        } else {
+          const paymentErr = parsePaymentBackendError(error);
+          displayMessage = paymentErr.message;
+        }
+      } catch (parseErr) {
+        const paymentErr = parsePaymentBackendError(error);
+        displayMessage = paymentErr.message;
+      }
+
+      alert(displayMessage);
       setCheckoutState('idle');
     }
   };
@@ -255,7 +320,17 @@ export default function CheckoutScreen() {
                       <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
                         <QuantitySelector
                           quantity={item.quantity}
-                          onIncrement={() => !isLocked && updateQuantity(item.meal.id, item.quantity + 1)}
+                          onIncrement={() => {
+                            if (isLocked) return;
+                            if (orderMode === 'LIVE_INVENTORY') {
+                               const invItem = inventory.find(i => i.meal_id === item.meal.id);
+                               if (invItem && item.quantity >= invItem.customer_available) {
+                                  alert(`Only ${invItem.customer_available} available.`);
+                                  return;
+                               }
+                            }
+                            updateQuantity(item.meal.id, item.quantity + 1);
+                          }}
                           onDecrement={() => !isLocked && updateQuantity(item.meal.id, Math.max(1, item.quantity - 1))}
                           min={1}
                         />
