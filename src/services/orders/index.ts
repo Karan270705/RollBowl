@@ -216,7 +216,18 @@ export async function placeOrder(
   await NotificationEvents.notifyOrderPlaced(userId, orderNumber, orderId);
 
   // Return the fetched order to match signature
-  return fetchOrderById(orderId);
+  const createdOrder = await fetchOrderById(orderId);
+
+  console.log('[CUSTOMER ORDER CREATED]', {
+    orderId: createdOrder.id,
+    pickupDate: createdOrder.pickupDate,
+    paymentMethod: createdOrder.paymentMethod,
+    paymentStatus: createdOrder.paymentStatus,
+    verificationStatus: createdOrder.paymentVerificationStatus,
+    status: createdOrder.status,
+  });
+
+  return createdOrder;
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus, userId: string, orderNumber: string) {

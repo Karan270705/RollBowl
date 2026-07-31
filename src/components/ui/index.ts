@@ -6,3 +6,5 @@ export { StatusBadge } from './StatusBadge';
 export { EmptyState } from './EmptyState';
 export { LoadingSpinner } from './LoadingSpinner';
 export { SearchBar } from './SearchBar';
+export { CartToast } from './Toast';
+

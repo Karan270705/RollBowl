@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AccessibilityInfo } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { MealType } from '@/src/constants/enums';
 import type { Meal } from '@/src/types/models';
@@ -10,7 +11,7 @@ import { formatCurrency } from '@/src/utils/formatters';
 interface MealCardProps {
   meal: Meal;
   onPress: () => void;
-  onAddToCart?: () => void;
+  onAddToCart?: () => void | boolean;
   compact?: boolean;
   prominent?: boolean;
   isOrderable?: boolean;
@@ -19,6 +20,56 @@ interface MealCardProps {
 }
 
 export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable, inventoryStatus = 'pending', availableQuantity }) => {
+  const [isAdded, setIsAdded] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((enabled) => setReduceMotion(enabled))
+      .catch(() => {});
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleAddPress = (e: any) => {
+    e?.stopPropagation?.();
+    if (isAdded) return; // Prevent duplicate rapid taps
+
+    const result = onAddToCart?.();
+    if (result === false) return; // Blocked by stock safety check
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Ignore on unsupported devices
+    }
+
+    setIsAdded(true);
+
+    if (!reduceMotion) {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.85,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 3,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setIsAdded(false);
+    }, 1000);
+  };
+
   const typeColor = meal.type === MealType.VEG ? Colors.success : meal.type === MealType.VEGAN ? Colors.success : Colors.error;
   
   // Base operational availability
@@ -103,10 +154,18 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
               {meal.servingSize && <Text style={styles.prominentServing}>{meal.servingSize}</Text>}
             </View>
             {!unavailable && onAddToCart && (
-              <TouchableOpacity style={styles.prominentAddBtn} onPress={onAddToCart} activeOpacity={0.7}>
-                <Ionicons name="add" size={18} color={Colors.white} />
-                <Text style={styles.prominentAddText}>Add</Text>
-              </TouchableOpacity>
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                  style={[styles.prominentAddBtn, isAdded && styles.prominentAddBtnAdded]}
+                  onPress={handleAddPress}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={isAdded ? `${meal.name} added to cart` : `Add ${meal.name} to cart`}
+                >
+                  <Ionicons name={isAdded ? 'checkmark' : 'add'} size={18} color={Colors.white} />
+                  <Text style={styles.prominentAddText}>{isAdded ? 'Added' : 'Add'}</Text>
+                </TouchableOpacity>
+              </Animated.View>
             )}
           </View>
         </View>
@@ -187,9 +246,17 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
         </View>
         {/* Only show Add to Cart for available meals */}
         {!unavailable && onAddToCart && (
-          <TouchableOpacity style={styles.addButton} onPress={onAddToCart} activeOpacity={0.7}>
-            <Ionicons name="add" size={20} color={Colors.white} />
-          </TouchableOpacity>
+          <Animated.View style={[styles.addButtonWrapper, { transform: [{ scale: scaleAnim }] }]}>
+            <TouchableOpacity
+              style={[styles.addButton, isAdded && styles.addButtonAdded]}
+              onPress={handleAddPress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isAdded ? `${meal.name} added to cart` : `Add ${meal.name} to cart`}
+            >
+              <Ionicons name={isAdded ? 'checkmark' : 'add'} size={20} color={Colors.white} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </View>
     </TouchableOpacity>
@@ -230,11 +297,16 @@ const styles = StyleSheet.create({
   originalPrice: { fontSize: Typography.size.sm, color: Colors.textTertiary, textDecorationLine: 'line-through' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   rating: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textSecondary },
-  addButton: {
+  addButtonWrapper: {
     position: 'absolute', bottom: Spacing.md, right: Spacing.md,
+  },
+  addButton: {
     backgroundColor: Colors.primary, width: 36, height: 36,
     borderRadius: Radii.full, alignItems: 'center', justifyContent: 'center',
     ...Shadows.sm,
+  },
+  addButtonAdded: {
+    backgroundColor: Colors.success,
   },
   // Compact variant
   compactCard: {
@@ -277,6 +349,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.primary, borderRadius: Radii.full,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs,
+  },
+  prominentAddBtnAdded: {
+    backgroundColor: Colors.success,
   },
   prominentAddText: {
     fontSize: Typography.size.xs, fontFamily: Typography.family.semiBold, color: Colors.white,

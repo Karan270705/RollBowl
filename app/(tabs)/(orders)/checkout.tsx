@@ -167,6 +167,15 @@ export default function CheckoutScreen() {
         activeBatchId
       );
 
+      console.log('[CUSTOMER ORDER CREATED]', {
+        orderId: newOrder.id,
+        pickupDate: newOrder.pickupDate,
+        paymentMethod: newOrder.paymentMethod,
+        paymentStatus: newOrder.paymentStatus,
+        verificationStatus: newOrder.paymentVerificationStatus,
+        status: newOrder.status,
+      });
+
       setCreatedOrderId(newOrder.id);
       setBackendTotal(newOrder.total);
 

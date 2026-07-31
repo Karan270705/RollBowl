@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { Button, LoadingSpinner, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
@@ -183,7 +184,11 @@ export default function MealDetailScreen() {
           />
           <Button
             title="Add to Cart"
-            onPress={() => { addItem(meal, qty); router.back(); }}
+            onPress={() => {
+              try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+              addItem(meal, qty);
+              router.back();
+            }}
             leftIcon={<Ionicons name="cart-outline" size={18} color={Colors.white} />}
           />
         </View>

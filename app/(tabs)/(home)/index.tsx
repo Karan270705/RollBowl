@@ -274,15 +274,16 @@ export default function HomeScreen() {
               const inv = getInventoryInfo(meal.id);
               const isItemOrderable = canOrder && inv.status !== 'out_of_stock';
               
-              const handleAdd = isItemOrderable ? () => {
+              const handleAdd = isItemOrderable ? (): boolean => {
                 if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
                   const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
                   if (currentQty >= inv.quantity) {
                     alert(`Only ${inv.quantity} available.`);
-                    return;
+                    return false;
                   }
                 }
                 addItem(meal, 1);
+                return true;
               } : undefined;
 
               return (
@@ -327,15 +328,16 @@ export default function HomeScreen() {
     const inv = getInventoryInfo(meal.id);
     const isItemOrderable = canOrder && isScheduled && inv.status !== 'out_of_stock';
     
-    const handleAdd = isItemOrderable ? () => {
+    const handleAdd = isItemOrderable ? (): boolean => {
       if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
         const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
         if (currentQty >= inv.quantity) {
           alert(`Only ${inv.quantity} available.`);
-          return;
+          return false;
         }
       }
       addItem(meal, 1);
+      return true;
     } : undefined;
 
     return (
