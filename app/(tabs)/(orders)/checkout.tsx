@@ -1,7 +1,7 @@
 import { ScreenWrapper } from "@/src/components/layout";
 import { QuantitySelector } from "@/src/components/shared";
 import { Button } from "@/src/components/ui";
-import { PICKUP_LOCATION } from "@/src/constants/config";
+import { AppConfig, PICKUP_LOCATION } from "@/src/constants/config";
 import { PaymentMethod } from "@/src/constants/enums";
 import {
   Colors,
@@ -23,31 +23,86 @@ import { useCartStore, useUser } from "@/src/store";
 import { formatCurrency, formatFriendlyDate } from "@/src/utils/formatters";
 import { processSubscription } from "@/src/utils/subscriptionEngine";
 import { Ionicons } from "@expo/vector-icons";
+import type { InventoryMode } from "@/src/engine/availabilityResolver";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/src/lib/supabase";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
 import { UpiPaymentPanel } from "@/src/components/payments/UpiPaymentPanel";
 import { PaymentScreenshotPicker, SelectedImage } from "@/src/components/payments/PaymentScreenshotPicker";
 import { usePaymentSettings, useSubmitOrderProof } from "@/src/hooks/payments/usePayments";
 import { uploadPaymentScreenshot, parsePaymentBackendError } from "@/src/services/payments";
+import { resolveOperationalFacts } from "@/src/engine/operationalEngine";
 
-type CheckoutState = 'idle' | 'creating_order' | 'order_created' | 'uploading_proof' | 'linking_proof' | 'proof_submitted' | 'recovery_required';
+type CheckoutState =
+  | 'REVIEW'
+  | 'SUBMITTING'
+  | 'ORDER_CREATED'
+  | 'AWAITING_PROOF'
+  | 'COMPLETED'
+  | 'FAILED';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { items, clearCart, updateQuantity, removeItem } = useCartStore();
+  const { items, cartPickupDate, clearCart, updateQuantity, removeItem } = useCartStore();
   const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
   const user = useUser();
   const [pickupSlot, setPickupSlot] = useState<string>("12:00-12:30");
   
-  // Staged UPI state
-  const [checkoutState, setCheckoutState] = useState<CheckoutState>('idle');
+  // Staged Checkout state
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>('REVIEW');
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
   const [backendTotal, setBackendTotal] = useState<number | null>(null);
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
+
+  // Synchronous double-submit guard ref & unmount logging refs
+  const submittingRef = useRef(false);
+  const checkoutStateRef = useRef<CheckoutState>('REVIEW');
+  const hasSubmittedRef = useRef(false);
+  const paymentRef = useRef<PaymentMethod>(PaymentMethod.UPI);
+  const cartItemCountRef = useRef(items.reduce((sum, i) => sum + i.quantity, 0));
+  const createdOrderIdRef = useRef<string | null>(null);
+  const requestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    checkoutStateRef.current = checkoutState;
+  }, [checkoutState]);
+
+  useEffect(() => {
+    paymentRef.current = payment;
+  }, [payment]);
+
+  useEffect(() => {
+    cartItemCountRef.current = items.reduce((sum, i) => sum + i.quantity, 0);
+  }, [items]);
+
+  useEffect(() => {
+    createdOrderIdRef.current = createdOrderId;
+  }, [createdOrderId]);
+
+  // Temporary diagnostic log: [CHECKOUT MOUNT] & [CHECKOUT EXIT]
+  useEffect(() => {
+    const initialItemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+    console.log('[CHECKOUT MOUNT]', JSON.stringify({
+      checkoutState: 'REVIEW',
+      orderId: null,
+      cartItemCount: initialItemCount,
+      cartPickupDate: cartPickupDate || null,
+    }, null, 2));
+
+    return () => {
+      console.log('[CHECKOUT EXIT]', JSON.stringify({
+        checkoutState: checkoutStateRef.current,
+        hasSubmitted: hasSubmittedRef.current,
+        submitting: submittingRef.current,
+        selectedPaymentMethod: paymentRef.current,
+        cartItemCount: cartItemCountRef.current,
+        orderId: createdOrderIdRef.current,
+      }, null, 2));
+    };
+  }, []);
 
   const { data: opFacts, isLoading: isLoadingOp } = useOperationalWindow();
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
@@ -67,13 +122,34 @@ export default function CheckoutScreen() {
     (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === opFacts?.operationalDate
   );
   const activeBatchId = activeBatch ? activeBatch.batch_id : null;
-  const orderMode = activeBatchId ? 'LIVE_INVENTORY' : 'PREORDER';
+  const inventoryMode: InventoryMode = activeBatchId ? 'LIVE_INVENTORY' : 'UNTRACKED';
 
   console.log('[CHECKOUT INVENTORY CONTEXT]', {
     resolvedDate: opFacts?.operationalDate,
     activeBatchId,
+    inventoryMode,
     inventoryLength: inventory.length
   });
+
+  const isCartStaleOrLegacy: boolean = Boolean(
+    items.length > 0 &&
+    (!cartPickupDate || (opFacts?.operationalDate && cartPickupDate !== opFacts.operationalDate))
+  );
+
+  React.useEffect(() => {
+    if (opFacts) {
+      console.log('[CUSTOMER ROLLOVER CONTEXT]', JSON.stringify({
+        nowIST: new Date().toISOString(),
+        calendarDate: opFacts.operationalDate,
+        resolvedOrderDate: opFacts.operationalDate,
+        menuDate: opFacts.activeMenu?.menu_date || null,
+        inventoryDate: activeBatch?.inventory_date || null,
+        cartPickupDate,
+        rolloverTime: AppConfig.BUSINESS.OPERATIONAL_ROLLOVER_TIME,
+        resolutionReason: 'Resolved by Customer Engine',
+      }, null, 2));
+    }
+  }, [opFacts, cartPickupDate, activeBatch]);
 
   // Engine logic
   const engineResult = processSubscription(
@@ -95,71 +171,134 @@ export default function CheckoutScreen() {
     opFacts?.isPrepTime !== true && 
     opFacts?.activeMenu?.is_published === true;
 
-  const handlePlaceOrderClick = async () => {
-    if (!user || items.length === 0) return;
+  const handleSelectPaymentMethod = (method: PaymentMethod) => {
+    if (checkoutState !== 'REVIEW' && checkoutState !== 'FAILED') return;
+    setPayment(method);
+    console.log('[PAYMENT METHOD SELECTED]', JSON.stringify({
+      paymentMethod: method,
+      backendMutationTriggered: false,
+    }, null, 2));
+  };
 
-    if (!canOrder || !opFacts?.operationalDate) {
-      alert("Ordering is currently closed or cannot determine date.");
+  const handlePlaceOrder = async () => {
+    // 1. synchronous duplicate-submit guard
+    if (submittingRef.current) {
       return;
     }
 
-    // Validation
-    const invalidItems = items.filter((cartItem) => !scheduledMeals.some((m) => m.id === cartItem.meal.id));
-    if (invalidItems.length > 0) {
-      alert("Some items are no longer available on today's menu.");
-      return;
-    }
-
-    if (orderMode === 'LIVE_INVENTORY') {
-      // Pre-submit cart validation
-      const { data: latestInventory, error: fetchError } = await supabase
-        .from("customer_safe_inventory")
-        .select("*")
-        .eq("stall_id", stallId)
-        .eq("inventory_date", opFacts.operationalDate);
-
-      const currentActiveBatch = latestInventory?.find((b: any) => b.batch_status === 'active');
-      
-      if (fetchError || !currentActiveBatch || currentActiveBatch.batch_id !== activeBatchId) {
-        alert("Stock changed while you were checking out. Please review your cart.");
-        return;
-      }
-
-      const overLimit = items.filter((cartItem) => {
-        const invItem = latestInventory.find((i: any) => i.meal_id === cartItem.meal.id);
-        if (!invItem) return true;
-        return cartItem.quantity > invItem.customer_available;
-      });
-
-      if (overLimit.length > 0) {
-        alert("Stock changed while you were checking out. Please review your cart.");
-        return;
-      }
-    }
-
-    // Fully subscription covered bypasses UPI logic
-    const resolvedPaymentMethod = isFullyCoveredBySubscription ? PaymentMethod.CASH : payment;
+    const currentRequestId = requestIdRef.current || `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    requestIdRef.current = currentRequestId;
 
     try {
-      setCheckoutState('creating_order');
+      submittingRef.current = true;
+      setCheckoutState('SUBMITTING');
+
+      // 2. confirm cart is non-empty
+      if (!user || items.length === 0) {
+        setCheckoutState('REVIEW');
+        return;
+      }
+
+      // 3. confirm cartPickupDate is valid
+      if (isCartStaleOrLegacy || !cartPickupDate) {
+        alert("Your cart belongs to an earlier menu. Clear it and add items from the current menu before checking out.");
+        setCheckoutState('REVIEW');
+        return;
+      }
+
+      // 9. verify a payment method is selected
+      if (!payment && !isFullyCoveredBySubscription) {
+        alert("Select a payment method before placing your order.");
+        setCheckoutState('REVIEW');
+        return;
+      }
+
+      // 4. refetch operational facts
       const orderStallId = items[0].meal.stallId;
-      if (!orderStallId) throw new Error("Cannot determine stall for this order.");
+      if (!orderStallId) {
+        alert("We could not place your order. Please try again.");
+        setCheckoutState('REVIEW');
+        return;
+      }
 
-      const appliedSubscriptionId = (engineResult.subscriptionUpdates && subscription) ? subscription.id : undefined;
+      const freshOpFacts = await resolveOperationalFacts(orderStallId, cartPickupDate);
 
-      console.log('[PLACE ORDER PAYLOAD]', {
-        pickupDate: opFacts.operationalDate,
-        inventoryBatchId: activeBatchId,
-        itemCount: engineResult.processedItems.length,
+      // 5. verify ordering is still open & 6. verify menu date matches cartPickupDate
+      if (
+        !freshOpFacts ||
+        freshOpFacts.status !== 'ORDERING_OPEN' ||
+        freshOpFacts.isPrepTime === true ||
+        freshOpFacts.operationalDate !== cartPickupDate ||
+        (freshOpFacts.activeMenu && freshOpFacts.activeMenu.menu_date !== cartPickupDate)
+      ) {
+        alert("Ordering has closed for this menu.");
+        setCheckoutState('REVIEW');
+        return;
+      }
+
+      // 7. verify inventory batch/date when inventory is active & 8. verify quantities and current stock
+      if (inventoryMode === 'LIVE_INVENTORY') {
+        const { data: latestInventory, error: fetchError } = await supabase
+          .from("customer_safe_inventory")
+          .select("*")
+          .eq("stall_id", stallId)
+          .eq("inventory_date", freshOpFacts.operationalDate);
+
+        const currentActiveBatch = latestInventory?.find((b: any) => b.batch_status === 'active');
+        if (fetchError || !currentActiveBatch || currentActiveBatch.batch_id !== activeBatchId) {
+          alert("Stock changed while you were checking out. Please review your cart.");
+          setCheckoutState('REVIEW');
+          return;
+        }
+
+        const overLimit = items.filter((cartItem) => {
+          const invItem = latestInventory.find((i: any) => i.meal_id === cartItem.meal.id);
+          if (!invItem) return true;
+          return cartItem.quantity > invItem.customer_available;
+        });
+
+        if (overLimit.length > 0) {
+          alert("Stock changed while you were checking out. Please review your cart.");
+          setCheckoutState('REVIEW');
+          return;
+        }
+      }
+
+      const invalidItems = items.filter((cartItem) => !scheduledMeals.some((m) => m.id === cartItem.meal.id));
+      if (invalidItems.length > 0) {
+        alert("Stock changed while you were checking out. Please review your cart.");
+        setCheckoutState('REVIEW');
+        return;
+      }
+
+      const resolvedPaymentMethod = isFullyCoveredBySubscription ? PaymentMethod.CASH : payment;
+      const totalCartCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+      // Diagnostic log: [PLACE ORDER INTENT]
+      console.log('[PLACE ORDER INTENT]', JSON.stringify({
+        source: 'PLACE_ORDER_BUTTON',
         paymentMethod: resolvedPaymentMethod,
-        pickupSlot
-      });
+        cartItemCount: totalCartCount,
+        pickupDate: freshOpFacts.operationalDate,
+      }, null, 2));
+
+      // Diagnostic log: [PLACE ORDER RPC START]
+      console.log('[PLACE ORDER RPC START]', JSON.stringify({
+        requestId: currentRequestId,
+        paymentMethod: resolvedPaymentMethod,
+        pickupDate: freshOpFacts.operationalDate,
+        inventoryBatchId: activeBatchId || null,
+        itemCount: engineResult.processedItems.length,
+      }, null, 2));
+
+      // 10. create exactly one order
+      const appliedSubscriptionId = (engineResult.subscriptionUpdates && subscription) ? subscription.id : undefined;
 
       const newOrder = await placeOrder(
         user.id,
         orderStallId,
         engineResult.processedItems,
-        opFacts.operationalDate,
+        freshOpFacts.operationalDate,
         pickupSlot,
         resolvedPaymentMethod,
         appliedSubscriptionId,
@@ -167,58 +306,96 @@ export default function CheckoutScreen() {
         activeBatchId
       );
 
-      console.log('[CUSTOMER ORDER CREATED]', {
+      // Diagnostic log: [PLACE ORDER RPC SUCCESS]
+      console.log('[PLACE ORDER RPC SUCCESS]', JSON.stringify({
+        requestId: currentRequestId,
         orderId: newOrder.id,
-        pickupDate: newOrder.pickupDate,
-        paymentMethod: newOrder.paymentMethod,
-        paymentStatus: newOrder.paymentStatus,
-        verificationStatus: newOrder.paymentVerificationStatus,
-        status: newOrder.status,
-      });
+      }, null, 2));
+
+      // Diagnostic log: [CUSTOMER ORDER COMMITTED]
+      console.log('[CUSTOMER ORDER COMMITTED]', JSON.stringify({
+        requestId: currentRequestId,
+        orderId: newOrder.id,
+        stallId: orderStallId,
+        pickupDate: freshOpFacts.operationalDate,
+        status: newOrder.status || 'pending',
+        paymentMethod: resolvedPaymentMethod,
+        itemCount: totalCartCount,
+        committedAt: new Date().toISOString(),
+      }, null, 2));
 
       setCreatedOrderId(newOrder.id);
+      createdOrderIdRef.current = newOrder.id;
       setBackendTotal(newOrder.total);
+      hasSubmittedRef.current = true;
 
-      // Invalidate relevant queries
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
       await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.active(user.id) });
 
+      // 11. handle payment-specific next steps
       if (resolvedPaymentMethod === PaymentMethod.UPI && !isFullyCoveredBySubscription) {
-        // Stop here, require proof upload
-        setCheckoutState('order_created');
+        setCheckoutState('ORDER_CREATED');
+
+        if (selectedImage) {
+          try {
+            const storagePath = await uploadPaymentScreenshot(
+              'orders',
+              user.id,
+              selectedImage.uri,
+              selectedImage.mimeType
+            );
+
+            await submitProofMutation.mutateAsync({
+              orderId: newOrder.id,
+              screenshotPath: storagePath,
+              mimeType: selectedImage.mimeType,
+              size: selectedImage.size,
+            });
+
+            clearCart();
+            setCheckoutState('COMPLETED');
+            router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
+          } catch (uploadErr) {
+            console.error('[PROOF UPLOAD FAILURE AFTER ORDER CREATION]', uploadErr);
+            alert("Your order was created, but the payment proof could not be uploaded. Retry the proof upload for this order.");
+            setCheckoutState('AWAITING_PROOF');
+          }
+        } else {
+          setCheckoutState('AWAITING_PROOF');
+        }
       } else {
-        // Cash or fully covered
         clearCart();
-        setCheckoutState('idle');
+        setCheckoutState('COMPLETED');
         router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
       }
     } catch (error: any) {
-      console.error(error);
-      
-      let displayMessage = "An error occurred placing your order.";
-      
+      console.error('[PLACE ORDER ERROR]', error);
+      setCheckoutState('FAILED');
+
+      let displayMessage = "We could not place your order. Please try again.";
       try {
         if (error.message) {
           const parsed = JSON.parse(error.message);
-          if (parsed.code === 'BATCH_REQUIRED') {
-            displayMessage = "We found live inventory for this pickup date but could not attach it to your order. Please retry.";
-          } else if (parsed.code) {
-            displayMessage = "Live inventory changed. Please refresh and try again.";
-          } else {
-             const paymentErr = parsePaymentBackendError(error);
-             displayMessage = paymentErr.message;
+          if (parsed.code === 'BATCH_REQUIRED' || parsed.code === 'INSUFFICIENT_STOCK') {
+            displayMessage = "Stock changed while you were checking out. Please review your cart.";
+          } else if (parsed.code === 'WINDOW_MISMATCH' || parsed.code === 'BATCH_NOT_ACTIVE' || parsed.code === 'ORDERING_CLOSED') {
+            displayMessage = "Ordering has closed for this menu.";
+          } else if (parsed.message) {
+            displayMessage = parsed.message;
           }
         } else {
           const paymentErr = parsePaymentBackendError(error);
-          displayMessage = paymentErr.message;
+          if (paymentErr.message) displayMessage = paymentErr.message;
         }
       } catch (parseErr) {
         const paymentErr = parsePaymentBackendError(error);
-        displayMessage = paymentErr.message;
+        if (paymentErr.message) displayMessage = paymentErr.message;
       }
 
       alert(displayMessage);
-      setCheckoutState('idle');
+      setCheckoutState('REVIEW');
+    } finally {
+      submittingRef.current = false;
     }
   };
 
@@ -226,7 +403,7 @@ export default function CheckoutScreen() {
     if (!user || !createdOrderId || !selectedImage) return;
 
     try {
-      setCheckoutState('uploading_proof');
+      setCheckoutState('SUBMITTING');
       
       const storagePath = await uploadPaymentScreenshot(
         'orders',
@@ -235,8 +412,6 @@ export default function CheckoutScreen() {
         selectedImage.mimeType
       );
 
-      setCheckoutState('linking_proof');
-
       await submitProofMutation.mutateAsync({
         orderId: createdOrderId,
         screenshotPath: storagePath,
@@ -244,27 +419,26 @@ export default function CheckoutScreen() {
         size: selectedImage.size,
       });
 
-      setCheckoutState('proof_submitted');
       clearCart();
+      setCheckoutState('COMPLETED');
       router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: createdOrderId } } as any);
 
     } catch (error) {
-      console.error(error);
-      const parsed = parsePaymentBackendError(error);
-      alert(parsed.message);
-      setCheckoutState('recovery_required');
+      console.error('[PROOF UPLOAD RETRY ERROR]', error);
+      alert("Your order was created, but the payment proof could not be uploaded. Retry the proof upload for this order.");
+      setCheckoutState('AWAITING_PROOF');
     }
   };
 
-  const isLocked = checkoutState !== 'idle';
-  const isRecovering = checkoutState === 'recovery_required' || checkoutState === 'order_created';
-  const isUploading = checkoutState === 'uploading_proof' || checkoutState === 'linking_proof';
+  const isLocked = checkoutState === 'SUBMITTING' || checkoutState === 'ORDER_CREATED' || checkoutState === 'COMPLETED';
+  const isRecovering = checkoutState === 'AWAITING_PROOF' || checkoutState === 'ORDER_CREATED';
+  const isUploading = checkoutState === 'SUBMITTING' && !!createdOrderId;
 
   return (
     <ScreenWrapper>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} disabled={isLocked && checkoutState !== 'recovery_required'}>
-          <Ionicons name="arrow-back" size={24} color={isLocked && checkoutState !== 'recovery_required' ? Colors.textTertiary : Colors.textPrimary} />
+        <TouchableOpacity onPress={() => router.back()} disabled={isLocked && !isRecovering}>
+          <Ionicons name="arrow-back" size={24} color={isLocked && !isRecovering ? Colors.textTertiary : Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Checkout</Text>
         <View style={{ width: 24 }} />
@@ -290,6 +464,32 @@ export default function CheckoutScreen() {
 
             {!isRecovering && (
               <>
+                {isCartStaleOrLegacy && (
+                  <View style={[styles.card, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight }]}>
+                    <Text style={[styles.cardTitle, { color: Colors.warning }]}>Cart Menu Changed</Text>
+                    <Text style={{ fontSize: Typography.size.sm, color: Colors.textPrimary, marginBottom: Spacing.sm }}>
+                      Your cart belongs to an earlier menu ({cartPickupDate ? formatFriendlyDate(cartPickupDate) : 'Earlier Menu'}), but the current menu is for {opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'Current Menu'}.
+                    </Text>
+                    <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.base }}>
+                      Your cart belongs to an earlier menu. Clear it and add items from the current menu before checking out.
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                      <Button
+                        title="Clear Cart"
+                        onPress={() => clearCart()}
+                        variant="primary"
+                        size="sm"
+                      />
+                      <Button
+                        title="Go to Current Menu"
+                        onPress={() => router.replace('/(tabs)/(home)' as any)}
+                        variant="outline"
+                        size="sm"
+                      />
+                    </View>
+                  </View>
+                )}
+
                 <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
                   <Text style={styles.cardTitle}>Expected Pickup Time</Text>
                   <View style={styles.chipContainer}>
@@ -331,7 +531,7 @@ export default function CheckoutScreen() {
                           quantity={item.quantity}
                           onIncrement={() => {
                             if (isLocked) return;
-                            if (orderMode === 'LIVE_INVENTORY') {
+                            if (inventoryMode === 'LIVE_INVENTORY') {
                                const invItem = inventory.find(i => i.meal_id === item.meal.id);
                                if (invItem && item.quantity >= invItem.customer_available) {
                                   alert(`Only ${invItem.customer_available} available.`);
@@ -368,7 +568,7 @@ export default function CheckoutScreen() {
                       key={p.key}
                       style={[styles.payOption, payment === p.key && styles.payActive, (isLocked || isUpiDisabled) && { opacity: 0.5 }]}
                       onPress={() => {
-                        if (!isLocked && !isUpiDisabled) setPayment(p.key);
+                        if (!isLocked && !isUpiDisabled) handleSelectPaymentMethod(p.key);
                       }}
                       disabled={isLocked || isUpiDisabled}
                     >
@@ -400,20 +600,38 @@ export default function CheckoutScreen() {
               </View>
             )}
 
+            {/* Stage 1: UPI Panel & Screenshot selection in REVIEW before Place Order */}
+            {!isRecovering && payment === PaymentMethod.UPI && paymentSettings && (
+              <View style={{ marginTop: Spacing.sm, marginBottom: Spacing.base }}>
+                <UpiPaymentPanel
+                  amount={displayTotal}
+                  recipientName={paymentSettings.recipientName}
+                  upiId={paymentSettings.upiId}
+                  qrImagePath={paymentSettings.qrImagePath}
+                >
+                  <PaymentScreenshotPicker
+                    onImageSelected={setSelectedImage}
+                    selectedImage={selectedImage}
+                    isUploading={isUploading}
+                  />
+                </UpiPaymentPanel>
+              </View>
+            )}
+
             {/* Stage 1: Order Creation Button */}
             {!isRecovering && (
               <Button
                 title={`Place Order • ${formatCurrency(displayTotal)}`}
-                onPress={handlePlaceOrderClick}
+                onPress={handlePlaceOrder}
                 fullWidth
                 size="lg"
-                loading={checkoutState === 'creating_order' || isLoadingOp || isLoadingMeals || isLoadingSettings}
-                disabled={isLocked || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingSettings}
+                loading={checkoutState === 'SUBMITTING' || isLoadingOp || isLoadingMeals || isLoadingSettings}
+                disabled={isLocked || items.length === 0 || isLoadingOp || isLoadingMeals || isLoadingSettings || isCartStaleOrLegacy}
                 style={{ marginBottom: Spacing.xl }}
               />
             )}
 
-            {/* Stage 2: UPI Upload Flow (Order created but needs proof) */}
+            {/* Stage 2: UPI Upload Flow (Order created but needs proof retry/submission) */}
             {(isRecovering) && payment === PaymentMethod.UPI && paymentSettings && (
               <View style={{ marginTop: Spacing.md }}>
                 <UpiPaymentPanel
@@ -444,7 +662,6 @@ export default function CheckoutScreen() {
                   variant="ghost"
                   fullWidth
                   onPress={() => {
-                    // Navigate to confirmation even if proof wasn't submitted yet
                     router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: createdOrderId } } as any);
                   }}
                   disabled={isUploading}

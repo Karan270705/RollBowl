@@ -2,6 +2,7 @@ import { supabase } from '@/src/lib/supabase';
 import { MenuSchedule } from '@/src/services/menu';
 import { KitchenHoliday } from '@/src/types/models';
 import { AppConfig } from '@/src/constants/config';
+import { parseTimeToDateIST } from '@/src/utils/operationalDate';
 
 export type OperationalStatus = 'HOLIDAY' | 'MENU_COMING_SOON' | 'ORDERING_OPEN' | 'ORDERING_CLOSED' | 'PICKUP_ACTIVE';
 
@@ -15,28 +16,24 @@ export interface OperationalFacts {
   canPlaceOrders: boolean;
   pickupWindowOpen: boolean;
   isPrepTime: boolean;
+  orderCutoff: string;
 }
 
 /**
- * Helper to parse a time string "HH:mm" and set it on a target date object.
+ * Helper to parse a time string "HH:mm" and set it on a target date string in IST.
  */
-function setTimeOnDate(date: Date | string, timeStr: string): Date {
-  const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+function setTimeOnDateIST(dateStr: string, timeStr: string): Date {
   return parseTimeToDateIST(dateStr, timeStr);
 }
 
-import { getCurrentISTTime, parseTimeToDateIST } from '@/src/utils/operationalDate';
-
 /**
  * The Central Factual Engine
- * Resolves the operational state purely based on business timings.
+ * Resolves the operational state purely based on business timings and the resolved order date.
  */
 export async function resolveOperationalFacts(stallId: string, resolvedOperationalDate: string): Promise<OperationalFacts> {
   const operationalDate = resolvedOperationalDate;
-  
-  const now = getCurrentISTTime();
 
-  // 2. State Evaluation: Holiday Check
+  // 1. Holiday Check
   const { data: holidayData } = await supabase
     .from('kitchen_holidays')
     .select('*')
@@ -55,10 +52,11 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
       canPlaceOrders: false,
       pickupWindowOpen: false,
       isPrepTime: false,
+      orderCutoff: '',
     };
   }
 
-  // 3. State Evaluation: Menu Check
+  // 2. Menu Check
   const { data: menuData } = await supabase
     .from('menu_schedules')
     .select('*')
@@ -77,18 +75,19 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
       canPlaceOrders: false,
       pickupWindowOpen: false,
       isPrepTime: false,
+      orderCutoff: '',
     };
   }
 
-  // 4. State Evaluation: Timing Checks
-  const orderCutoff = setTimeOnDate(operationalDate, AppConfig.BUSINESS.ORDER_CUTOFF_TIME);
-  const pickupStart = setTimeOnDate(operationalDate, AppConfig.BUSINESS.PICKUP_START_TIME);
-  const pickupEndForOp = setTimeOnDate(operationalDate, AppConfig.BUSINESS.PICKUP_END_TIME);
+  // 3. Timing Checks using epoch milliseconds in IST
+  const orderCutoffDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.ORDER_CUTOFF_TIME);
+  const pickupStartDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.PICKUP_START_TIME);
+  const pickupEndDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.PICKUP_END_TIME);
 
   const nowMs = Date.now();
-  const orderCutoffMs = orderCutoff.getTime();
-  const pickupStartMs = pickupStart.getTime();
-  const pickupEndMs = pickupEndForOp.getTime();
+  const orderCutoffMs = orderCutoffDate.getTime();
+  const pickupStartMs = pickupStartDate.getTime();
+  const pickupEndMs = pickupEndDate.getTime();
 
   const isBeforeOrAtCutoff = Number.isFinite(orderCutoffMs) && nowMs <= orderCutoffMs;
   const isPrepTime = Number.isFinite(orderCutoffMs) && Number.isFinite(pickupStartMs) && nowMs > orderCutoffMs && nowMs < pickupStartMs;
@@ -104,21 +103,19 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
   const canPlaceOrders = isBeforeOrAtCutoff;
 
   if (!isBeforeOrAtCutoff && status !== 'ORDERING_OPEN') {
-    console.error('[ORDER STATUS BUG] Before cutoff but status is closed', {
+    console.log('[ORDER STATUS INFO] After cutoff or closed', {
       now: new Date(nowMs).toISOString(),
       cutoff: new Date(orderCutoffMs).toISOString(),
       status,
     });
   }
 
-  console.log('[ORDER COMPARISON]', {
-    nowISO: new Date(nowMs).toISOString(),
-    cutoffISO: new Date(orderCutoffMs).toISOString(),
-    nowMs,
-    orderCutoffMs,
-    differenceMinutes: (orderCutoffMs - nowMs) / 60000,
-    isBeforeOrAtCutoff,
+  console.log('[DevLog] resolveOperationalFacts', {
+    operationalDate,
     status,
+    isBeforeOrAtCutoff,
+    isPrepTime,
+    canPlaceOrders,
   });
 
   return {
@@ -131,5 +128,6 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
     canPlaceOrders,
     pickupWindowOpen,
     isPrepTime,
+    orderCutoff: orderCutoffDate.toISOString(),
   };
 }

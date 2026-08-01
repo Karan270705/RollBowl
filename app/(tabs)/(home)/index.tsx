@@ -11,6 +11,7 @@ import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory,
 import { useQueryClient } from '@tanstack/react-query';
 import { getGreeting, formatFriendlyDate, formatTimeSlot } from '@/src/utils/formatters';
 import { usePrimaryStallId } from '@/src/hooks/usePrimaryStallId';
+import { resolveCustomerMealAvailability, type InventoryMode } from '@/src/engine/availabilityResolver';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -32,8 +33,9 @@ export default function HomeScreen() {
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
 
   // ─── Live Inventory ─────────────────────────────────────────────
-  const stallId = opFacts?.activeMenu?.stall_id;
-  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
+  const stallId = primaryStallId || opFacts?.activeMenu?.stall_id;
+  const targetDate = opFacts?.operationalDate || operationalContext.resolvedOperationalDate || operationalContext.preparationDate;
+  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, targetDate);
 
   const { data: allMeals = [] } = useAllMeals();
 
@@ -41,30 +43,28 @@ export default function HomeScreen() {
 
   // Active batch / mode resolution
   const activeBatch = inventory.find(
-    (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === opFacts?.operationalDate
+    (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === targetDate
   );
   const activeBatchId = activeBatch ? activeBatch.batch_id : null;
-  const orderMode = activeBatchId ? 'LIVE_INVENTORY' : 'PREORDER';
+  const inventoryMode: InventoryMode = activeBatchId ? 'LIVE_INVENTORY' : 'UNTRACKED';
+  const orderMode = inventoryMode;
 
   const inventoryByMealId = useMemo(() => {
     return new Map(inventory.map(item => [item.meal_id, item]));
   }, [inventory]);
 
-  // Helper to get inventory status for a meal
-  const getInventoryInfo = (mealId: string) => {
-    if (orderMode !== 'LIVE_INVENTORY') {
-      return { status: 'pending' as const, quantity: undefined };
+  useEffect(() => {
+    if (targetDate) {
+      console.log('[INVENTORY MODE]', JSON.stringify({
+        serviceDate: targetDate,
+        mode: inventoryMode,
+        batchId: activeBatchId || null,
+        customerAvailableCount: inventory.length,
+        timestamp: new Date().toISOString(),
+      }, null, 2));
     }
-    
-    const item = inventoryByMealId.get(mealId);
-    if (!item) {
-      return { status: 'not_in_batch' as const, quantity: 0 };
-    }
-    return { 
-      status: item.stock_status, 
-      quantity: item.customer_available 
-    };
-  };
+  }, [targetDate, inventoryMode, activeBatchId, inventory.length]);
+
 
   // ─── Browse Catalog ───────────────────────────────────────
 
@@ -195,7 +195,6 @@ export default function HomeScreen() {
   const orderStateFinal = {
     nowISO: new Date().toISOString(),
     resolvedDate: operationalContext?.resolvedOperationalDate,
-    contextPhase: operationalContext?.phase,
     opFactsStatus: opFacts?.status,
     isPrepTime: opFacts?.isPrepTime,
     orderCutoff: opFacts?.activeMenu?.order_cutoff,
@@ -271,18 +270,28 @@ export default function HomeScreen() {
           )}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
             {availableMeals.map((meal) => {
-              const inv = getInventoryInfo(meal.id);
-              const isItemOrderable = canOrder && inv.status !== 'out_of_stock';
-              
-              const handleAdd = isItemOrderable ? (): boolean => {
-                if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
+              const invItem = inventoryByMealId.get(meal.id);
+              const availability = resolveCustomerMealAvailability({
+                mealId: meal.id,
+                serviceDate: opFacts?.operationalDate,
+                isPublished: true,
+                mealIsAvailable: meal.isAvailable,
+                inventoryMode,
+                customerAvailable: invItem ? invItem.customer_available : null,
+                activeBatchId,
+                canPlaceOrders: Boolean(canOrder),
+                logDiagnostic: true,
+              });
+
+              const handleAdd = availability.canAdd ? (): boolean => {
+                if (inventoryMode === 'LIVE_INVENTORY' && availability.availableQuantity !== null) {
                   const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
-                  if (currentQty >= inv.quantity) {
-                    alert(`Only ${inv.quantity} available.`);
+                  if (currentQty >= availability.availableQuantity) {
+                    alert(`Only ${availability.availableQuantity} available.`);
                     return false;
                   }
                 }
-                addItem(meal, 1);
+                addItem(meal, opFacts?.operationalDate, 1);
                 return true;
               } : undefined;
 
@@ -293,9 +302,8 @@ export default function HomeScreen() {
                   prominent
                   onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
                   onAddToCart={handleAdd}
-                  isOrderable={isItemOrderable}
-                  inventoryStatus={inv.status}
-                  availableQuantity={inv.quantity}
+                  isOrderable={availability.canAdd}
+                  availability={availability}
                 />
               );
             })}
@@ -325,18 +333,28 @@ export default function HomeScreen() {
 
   const renderMealItem = ({ item: meal }: { item: any }) => {
     const isScheduled = availableMeals.some(m => m.id === meal.id);
-    const inv = getInventoryInfo(meal.id);
-    const isItemOrderable = canOrder && isScheduled && inv.status !== 'out_of_stock';
+    const invItem = inventoryByMealId.get(meal.id);
+    const availability = resolveCustomerMealAvailability({
+      mealId: meal.id,
+      serviceDate: opFacts?.operationalDate,
+      isPublished: isScheduled,
+      mealIsAvailable: meal.isAvailable,
+      inventoryMode,
+      customerAvailable: invItem ? invItem.customer_available : null,
+      activeBatchId,
+      canPlaceOrders: Boolean(canOrder),
+      logDiagnostic: true,
+    });
     
-    const handleAdd = isItemOrderable ? (): boolean => {
-      if (orderMode === 'LIVE_INVENTORY' && inv.quantity !== undefined) {
+    const handleAdd = availability.canAdd ? (): boolean => {
+      if (inventoryMode === 'LIVE_INVENTORY' && availability.availableQuantity !== null) {
         const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
-        if (currentQty >= inv.quantity) {
-          alert(`Only ${inv.quantity} available.`);
+        if (currentQty >= availability.availableQuantity) {
+          alert(`Only ${availability.availableQuantity} available.`);
           return false;
         }
       }
-      addItem(meal, 1);
+      addItem(meal, opFacts?.operationalDate, 1);
       return true;
     } : undefined;
 
@@ -345,9 +363,8 @@ export default function HomeScreen() {
         meal={meal}
         onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
         onAddToCart={handleAdd}
-        isOrderable={isItemOrderable}
-        inventoryStatus={inv.status}
-        availableQuantity={inv.quantity}
+        isOrderable={availability.canAdd}
+        availability={availability}
       />
     );
   };

@@ -34,6 +34,7 @@ export const AppConfig = {
     PICKUP_START_TIME: '12:00', // 24h format HH:mm
     PICKUP_END_TIME: '14:00',
     ORDER_CUTOFF_TIME: '10:00',
+    OPERATIONAL_ROLLOVER_TIME: '15:00',
   }
 } as const;
 

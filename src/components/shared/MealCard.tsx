@@ -7,6 +7,7 @@ import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/the
 import { MealType } from '@/src/constants/enums';
 import type { Meal } from '@/src/types/models';
 import { formatCurrency } from '@/src/utils/formatters';
+import type { CustomerMealAvailabilityResult } from '@/src/engine/availabilityResolver';
 
 interface MealCardProps {
   meal: Meal;
@@ -17,9 +18,10 @@ interface MealCardProps {
   isOrderable?: boolean;
   inventoryStatus?: 'pending' | 'available' | 'low_stock' | 'out_of_stock' | 'not_in_batch';
   availableQuantity?: number;
+  availability?: CustomerMealAvailabilityResult;
 }
 
-export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable, inventoryStatus = 'pending', availableQuantity }) => {
+export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable, inventoryStatus = 'pending', availableQuantity, availability }) => {
   const [isAdded, setIsAdded] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -72,39 +74,47 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
 
   const typeColor = meal.type === MealType.VEG ? Colors.success : meal.type === MealType.VEGAN ? Colors.success : Colors.error;
   
-  // Base operational availability
-  const isOperationallyAvailable = isOrderable !== false && meal.isAvailable;
-  
-  // Inventory availability overrides
-  const isInventoryAvailable = inventoryStatus !== 'out_of_stock' && inventoryStatus !== 'not_in_batch';
-  
-  const unavailable = !isOperationallyAvailable || !isInventoryAvailable;
+  // Resolve availability either from structured availability prop or legacy fallback
+  const unavailable = availability
+    ? !availability.canAdd
+    : (!((isOrderable !== false) && meal.isAvailable) || inventoryStatus === 'out_of_stock' || inventoryStatus === 'not_in_batch');
 
   let unavailableText = 'Not Available';
-  if (inventoryStatus === 'out_of_stock') unavailableText = 'Sold Out';
-  else if (inventoryStatus === 'not_in_batch') unavailableText = 'Not loaded in live stock';
-  else if (isOrderable === false) unavailableText = 'Not Available Today';
+  if (availability) {
+    unavailableText = availability.reason || 'Not Available';
+  } else if (inventoryStatus === 'out_of_stock') {
+    unavailableText = 'Sold Out';
+  } else if (inventoryStatus === 'not_in_batch') {
+    unavailableText = 'Not loaded in live stock';
+  } else if (isOrderable === false) {
+    unavailableText = 'Not Available Today';
+  }
 
   const renderInventoryBadge = () => {
     if (unavailable) return null;
     
-    if (inventoryStatus === 'low_stock' && availableQuantity !== undefined) {
-      return (
-        <View style={[styles.tagContainer, { backgroundColor: Colors.warning }]}>
-          <Text style={styles.tag}>Only {availableQuantity} left</Text>
-        </View>
-      );
+    // In UNTRACKED mode, never show fake stock or stock pending
+    if (availability && availability.inventoryMode === 'UNTRACKED') {
+      return null;
     }
     
-    if (inventoryStatus === 'available' && availableQuantity !== undefined) {
+    const qty = availability ? availability.availableQuantity : availableQuantity;
+    if (qty !== undefined && qty !== null) {
+      if (qty <= 5) {
+        return (
+          <View style={[styles.tagContainer, { backgroundColor: Colors.warning }]}>
+            <Text style={styles.tag}>Only {qty} left</Text>
+          </View>
+        );
+      }
       return (
         <View style={[styles.tagContainer, { backgroundColor: Colors.success }]}>
-          <Text style={styles.tag}>{availableQuantity > 5 ? 'In stock' : `Only ${availableQuantity} left`}</Text>
+          <Text style={styles.tag}>In stock</Text>
         </View>
       );
     }
 
-    if (inventoryStatus === 'pending') {
+    if (!availability && inventoryStatus === 'pending') {
       return (
         <View style={[styles.tagContainer, { backgroundColor: Colors.surfaceElevated }]}>
           <Text style={[styles.tag, { color: Colors.textSecondary }]}>Stock Pending</Text>

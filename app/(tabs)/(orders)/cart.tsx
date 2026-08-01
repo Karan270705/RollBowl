@@ -9,17 +9,27 @@ import { Button, EmptyState } from '@/src/components/ui';
 import { QuantitySelector } from '@/src/components/shared';
 import { useCartStore } from '@/src/store';
 import { useOperationalWindow, useLiveInventory } from '@/src/hooks';
-import { formatCurrency } from '@/src/utils/formatters';
+import { formatCurrency, formatFriendlyDate } from '@/src/utils/formatters';
+import { MealType } from '@/src/constants/enums';
+import type { InventoryMode } from '@/src/engine/availabilityResolver';
 
 export default function CartScreen() {
   const router = useRouter();
   const { data: opFacts } = useOperationalWindow();
   const stallId = opFacts?.activeMenu?.stall_id;
   const { data: inventory = [] } = useLiveInventory(stallId, opFacts?.operationalDate);
-  const { items, updateQuantity, removeItem, getSubtotal, clearCart } = useCartStore();
+  const { items, cartPickupDate, updateQuantity, removeItem, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
+
+  const activeBatch = inventory.find(b => b.batch_status === 'active');
+  const inventoryMode: InventoryMode = activeBatch ? 'LIVE_INVENTORY' : 'UNTRACKED';
+
+  const isCartStaleOrLegacy: boolean = Boolean(
+    items.length > 0 &&
+    (!cartPickupDate || (opFacts?.operationalDate && cartPickupDate !== opFacts.operationalDate))
+  );
 
   if (items.length === 0) {
     return (
@@ -44,6 +54,34 @@ export default function CartScreen() {
         <TouchableOpacity onPress={clearCart}><Text style={styles.clearText}>Clear</Text></TouchableOpacity>
       </View>
 
+      {isCartStaleOrLegacy && (
+        <View style={[styles.summary, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight, marginBottom: Spacing.base }]}>
+          <Text style={{ fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.warning, marginBottom: 4 }}>
+            Cart Menu Changed
+          </Text>
+          <Text style={{ fontSize: Typography.size.sm, color: Colors.textPrimary, marginBottom: Spacing.sm }}>
+            Your cart belongs to an earlier menu ({cartPickupDate ? formatFriendlyDate(cartPickupDate) : 'Earlier Menu'}), but the current menu is for {opFacts?.operationalDate ? formatFriendlyDate(opFacts.operationalDate) : 'Current Menu'}.
+          </Text>
+          <Text style={{ fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.base }}>
+            Your cart belongs to an earlier menu. Clear it and add items from the current menu before checking out.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <Button
+              title="Clear Cart"
+              onPress={() => clearCart()}
+              variant="primary"
+              size="sm"
+            />
+            <Button
+              title="Go to Current Menu"
+              onPress={() => router.replace('/(tabs)/(home)' as any)}
+              variant="outline"
+              size="sm"
+            />
+          </View>
+        </View>
+      )}
+
       {items.map((item) => (
         <View key={item.meal.id} style={styles.cartItem}>
           <Image 
@@ -59,12 +97,18 @@ export default function CartScreen() {
             <QuantitySelector
               quantity={item.quantity}
               onIncrement={() => {
-                const invItem = inventory.find(i => i.meal_id === item.meal.id);
-                const maxAllowed = invItem ? invItem.customer_available : 99;
-                if (item.quantity < maxAllowed) {
-                  updateQuantity(item.meal.id, item.quantity + 1);
-                } else if (invItem) {
-                  alert(`Only ${maxAllowed} available.`);
+                if (inventoryMode === 'LIVE_INVENTORY') {
+                  const invItem = inventory.find(i => i.meal_id === item.meal.id);
+                  if (!invItem) {
+                    alert('This item is not loaded in live stock.');
+                    return;
+                  }
+                  const maxAllowed = invItem.customer_available;
+                  if (item.quantity < maxAllowed) {
+                    updateQuantity(item.meal.id, item.quantity + 1);
+                  } else {
+                    alert(`Only ${maxAllowed} available.`);
+                  }
                 } else {
                   updateQuantity(item.meal.id, item.quantity + 1);
                 }
@@ -85,7 +129,13 @@ export default function CartScreen() {
         <View style={[styles.summaryRow, styles.totalRow]}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalValue}>{formatCurrency(total)}</Text></View>
       </View>
 
-      <Button title="Proceed to Checkout" onPress={() => router.push('/(tabs)/(orders)/checkout' as any)} fullWidth size="lg" />
+      <Button
+        title="Proceed to Checkout"
+        onPress={() => router.push('/(tabs)/(orders)/checkout' as any)}
+        fullWidth
+        size="lg"
+        disabled={isCartStaleOrLegacy}
+      />
     </ScreenWrapper>
   );
 }
