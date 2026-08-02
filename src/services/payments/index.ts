@@ -9,23 +9,49 @@ import { SubscriptionRequestStatus } from '@/src/constants/enums';
 export function parsePaymentBackendError(error: any): { code?: string; message: string; details?: unknown } {
   if (!error) return { message: 'An unknown error occurred.' };
 
+  let code: string | undefined = error.code;
+  let message: string = typeof error.message === 'string' ? error.message : (error.message || 'An unknown error occurred.');
+  let details: unknown;
+
   if (typeof error.message === 'string') {
     try {
       const parsed = JSON.parse(error.message);
       if (parsed.message) {
-        return {
-          code: parsed.code,
-          message: parsed.message,
-          details: parsed,
-        };
+        code = parsed.code || code;
+        message = parsed.message;
+        details = parsed;
       }
     } catch (e) {
       // Not JSON, just return the message
-      return { message: error.message };
     }
   }
 
-  return { message: error.message || 'An unknown error occurred.' };
+  if (code === 'PAYMENT_PROOF_NOT_PENDING' || message.includes('PAYMENT_PROOF_NOT_PENDING')) {
+    message = 'This request is no longer accepting payment proof changes.';
+  } else if (code === 'SUBSCRIPTION_REQUEST_NOT_FOUND' || message.includes('SUBSCRIPTION_REQUEST_NOT_FOUND')) {
+    message = 'This subscription request could not be found.';
+  } else if (code === 'INVALID_SCREENSHOT_TYPE' || message.includes('INVALID_SCREENSHOT_TYPE') || message.includes('invalid image format')) {
+    message = 'Upload a JPEG, PNG, or WEBP image.';
+  } else if (code === 'SCREENSHOT_TOO_LARGE' || message.includes('SCREENSHOT_TOO_LARGE') || message.includes('exceeds 5 MB')) {
+    message = 'The screenshot must be 5 MB or smaller.';
+  } else if (code === 'PLAN_NOT_AVAILABLE_FOR_STALL' || message.includes('Stall does not belong to your college')) {
+    message = 'Subscription purchasing is temporarily unavailable. Please try again.';
+  } else if (
+    message.includes('P0001') ||
+    message.includes('PGRST') ||
+    message.includes('syntax error') ||
+    message.includes('stack trace') ||
+    message.includes('SQL') ||
+    message.startsWith('{')
+  ) {
+    message = 'An unexpected error occurred while processing your request. Please try again.';
+  }
+
+  return {
+    code,
+    message,
+    details,
+  };
 }
 
 // ─── Fetch Settings ───────────────────────────────────────────
@@ -107,7 +133,22 @@ export async function submitOrderPaymentProof(req: SubmitPaymentProofRequest): P
 
 // ─── Subscriptions ────────────────────────────────────────────
 
-export async function createSubscriptionPurchaseRequest(req: CreateSubscriptionPurchaseRequest): Promise<{ requestId: string; expectedAmount: number }> {
+export interface CreateSubscriptionRequestResult {
+  requestId: string;
+  planName: string;
+  baseAmount: number;
+  convenienceFeePercent: number;
+  convenienceFee: number;
+  expectedAmount: number;
+  currency: string;
+  totalMeals: number;
+  durationDays: number;
+  mealsPerDay: number;
+  categoryCreditCosts: Record<string, number>;
+  features: string[];
+}
+
+export async function createSubscriptionPurchaseRequest(req: CreateSubscriptionPurchaseRequest): Promise<CreateSubscriptionRequestResult> {
   const { data, error } = await supabase.rpc('create_subscription_purchase_request', {
     p_stall_id: req.stallId,
     p_plan_id: req.planId,
@@ -125,11 +166,21 @@ export async function createSubscriptionPurchaseRequest(req: CreateSubscriptionP
 
   return {
     requestId: data.request_id,
+    planName: data.plan_name,
+    baseAmount: Number(data.base_amount),
+    convenienceFeePercent: Number(data.convenience_fee_percent),
+    convenienceFee: Number(data.convenience_fee),
     expectedAmount: Number(data.expected_amount),
+    currency: data.currency || 'INR',
+    totalMeals: Number(data.total_meals),
+    durationDays: Number(data.duration_days),
+    mealsPerDay: Number(data.meals_per_day),
+    categoryCreditCosts: data.category_credit_costs || {},
+    features: data.features || [],
   };
 }
 
-export async function submitSubscriptionPaymentProof(req: SubmitSubscriptionPaymentProofRequest): Promise<void> {
+export async function submitSubscriptionPaymentProof(req: SubmitSubscriptionPaymentProofRequest): Promise<string> {
   const { data, error } = await supabase.rpc('submit_subscription_payment_proof', {
     p_request_id: req.requestId,
     p_screenshot_path: req.screenshotPath,
@@ -144,6 +195,8 @@ export async function submitSubscriptionPaymentProof(req: SubmitSubscriptionPaym
   if (data && (data as any).error) {
     throw new Error((data as any).message);
   }
+
+  return (data as string) || req.requestId;
 }
 
 export async function fetchSubscriptionPurchaseRequests(userId: string): Promise<SubscriptionPurchaseRequest[]> {

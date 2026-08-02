@@ -86,7 +86,15 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
     menuQuery = menuQuery.eq('stall_id', stallId);
   }
 
-  const { data: upcomingMenus } = await menuQuery;
+  console.log('[INSTRUMENTATION: resolveSharedOperationalDate - SUPABASE QUERY]', JSON.stringify({
+    table: 'menu_schedules',
+    filter_is_published: true,
+    filter_gt_menu_date: calendarDate,
+    filter_stall_id: stallId || 'none',
+    timestamp: new Date().toISOString(),
+  }, null, 2));
+
+  const { data: upcomingMenus, error: upcomingMenusError } = await menuQuery;
 
   let nextValidServiceDate: string | null = null;
   if (upcomingMenus && upcomingMenus.length > 0) {
@@ -94,6 +102,15 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
   }
 
   const preparationDate = nextValidServiceDate || tomorrowStr;
+
+  console.log('[INSTRUMENTATION: resolveSharedOperationalDate - SUPABASE RESULT]', JSON.stringify({
+    calendarDate,
+    tomorrowStr,
+    upcomingMenus: upcomingMenus || [],
+    error: upcomingMenusError || null,
+    nextValidServiceDate,
+    preparationDate,
+  }, null, 2));
 
   const logAndReturn = (
     resolvedDate: string | null,
@@ -108,7 +125,7 @@ export async function resolveSharedOperationalDate(stallId?: string): Promise<Op
       isResolving: false,
     };
 
-    console.log('[OPERATIONAL ROLLOVER]', JSON.stringify({
+    console.log('[INSTRUMENTATION: resolveSharedOperationalDate - RESULT]', JSON.stringify({
       nowIST: currentIST.toISOString(),
       calendarDate,
       rolloverTime: rolloverTimeStr,

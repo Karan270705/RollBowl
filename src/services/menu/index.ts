@@ -15,7 +15,11 @@ export interface MenuSchedule {
  * Fetches the active published menu schedule for a given date.
  */
 export async function fetchActiveMenuSchedule(targetDate: string): Promise<MenuSchedule | null> {
-  const now = new Date().toISOString();
+  console.log('[INSTRUMENTATION: fetchActiveMenuSchedule - QUERY]', JSON.stringify({
+    table: 'menu_schedules',
+    targetDate,
+    filter_is_published: true,
+  }, null, 2));
 
   const { data, error } = await supabase
     .from('menu_schedules')
@@ -23,6 +27,12 @@ export async function fetchActiveMenuSchedule(targetDate: string): Promise<MenuS
     .eq('menu_date', targetDate)
     .eq('is_published', true)
     .maybeSingle();
+
+  console.log('[INSTRUMENTATION: fetchActiveMenuSchedule - RESULT]', JSON.stringify({
+    targetDate,
+    foundSchedule: data || null,
+    error: error || null,
+  }, null, 2));
 
   if (error) {
     console.error('Error fetching active menu schedule:', error);
@@ -36,6 +46,11 @@ export async function fetchActiveMenuSchedule(targetDate: string): Promise<MenuS
  * Fetches the meals associated with a specific menu schedule.
  */
 export async function fetchScheduledMeals(scheduleId: string): Promise<Meal[]> {
+  console.log('[INSTRUMENTATION: fetchScheduledMeals - QUERY]', JSON.stringify({
+    table: 'menu_schedule_items',
+    scheduleId,
+  }, null, 2));
+
   const { data, error } = await supabase
     .from('menu_schedule_items')
     .select(`
@@ -43,6 +58,12 @@ export async function fetchScheduledMeals(scheduleId: string): Promise<Meal[]> {
       meals:meal_id (*)
     `)
     .eq('menu_schedule_id', scheduleId);
+
+  console.log('[INSTRUMENTATION: fetchScheduledMeals - RESULT]', JSON.stringify({
+    scheduleId,
+    itemCount: data?.length || 0,
+    error: error || null,
+  }, null, 2));
 
   if (error) {
     console.error('Error fetching scheduled meals:', error);
@@ -79,6 +100,7 @@ export async function fetchScheduledMeals(scheduleId: string): Promise<Meal[]> {
         preparationTime: row.preparation_time,
         servingSize: row.serving_size ?? undefined,
         nutrition: hasNutrition ? row.nutrition : undefined,
+        tags: row.tags ?? [],
       } as Meal;
     })
     .filter(Boolean) as Meal[];

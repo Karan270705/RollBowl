@@ -8,6 +8,8 @@ export function useActiveSubscription(userId: string | undefined) {
     queryKey: queryKeys.subscriptions?.active(userId) || ['subscriptions', 'active', userId],
     queryFn: () => getActiveSubscription(userId!),
     enabled: !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

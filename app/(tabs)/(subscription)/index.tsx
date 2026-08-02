@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
@@ -24,27 +24,73 @@ export default function SubscriptionScreen() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isProofModalVisible, setIsProofModalVisible] = useState(false);
 
-  const pendingRequests = requests.filter(r => 
-    r.status === SubscriptionRequestStatus.AWAITING_PROOF || 
-    r.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
-    r.status === SubscriptionRequestStatus.REJECTED
-  );
+  const pendingRequests = requests.filter(request => {
+    // 1. Hide when request.status is APPROVED
+    if (request.status === SubscriptionRequestStatus.APPROVED) {
+      return false;
+    }
+    // 2. Hide any stale local/cache copy once created_subscription_id exists
+    if (request.createdSubscriptionId) {
+      return false;
+    }
+    // 3. Hide rejected when an active subscription now exists for that approved request
+    if (
+      request.status === SubscriptionRequestStatus.REJECTED &&
+      subscription &&
+      subscription.status === 'active'
+    ) {
+      return false;
+    }
+    // 4. Show unresolved requests (awaiting_proof, verification_pending) or rejected when still unresolved
+    return (
+      request.status === SubscriptionRequestStatus.AWAITING_PROOF ||
+      request.status === SubscriptionRequestStatus.VERIFICATION_PENDING ||
+      request.status === SubscriptionRequestStatus.REJECTED
+    );
+  });
 
   const handlePurchase = (plan: any) => {
     if (!user) return;
     router.push({
-      pathname: '/(tabs)/(subscription)/purchase/[planId]',
-      params: { planId: plan.id }
+      pathname: '/(tabs)/(subscription)/purchase/[id]',
+      params: { id: plan.id }
     } as any);
   };
 
-  const handleRequestPress = (reqId: string, planId: string) => {
-    // If they need to upload proof again, take them to the purchase flow
-    // Or a dedicated request detail screen. Let's use the purchase flow which supports recovery.
-    router.push({
-      pathname: '/(tabs)/(subscription)/purchase/[planId]',
-      params: { planId: planId }
-    } as any);
+  const handleRequestPress = (req: any) => {
+    switch (req.status) {
+      case SubscriptionRequestStatus.AWAITING_PROOF:
+        router.push({
+          pathname: '/(tabs)/(subscription)/purchase/[id]',
+          params: { id: req.planId, requestId: req.id }
+        } as any);
+        break;
+      case SubscriptionRequestStatus.VERIFICATION_PENDING:
+        router.push({
+          pathname: '/(tabs)/(subscription)/success',
+          params: { isReplacement: 'false' }
+        } as any);
+        break;
+      case SubscriptionRequestStatus.REJECTED:
+        router.push({
+          pathname: '/(tabs)/(subscription)/purchase/[id]',
+          params: {
+            id: req.planId,
+            requestId: req.id,
+            rejected: 'true',
+            rejectionReason: req.rejectionReason || 'The kitchen could not verify your payment.'
+          }
+        } as any);
+        break;
+      case SubscriptionRequestStatus.APPROVED:
+        // Active subscription dashboard is displayed on this tab
+        break;
+      case SubscriptionRequestStatus.CANCELLED:
+        Alert.alert('Request Cancelled', 'This subscription request was cancelled.');
+        break;
+      default:
+        break;
+    }
   };
 
   if (isLoadingSub || isLoadingPlans || isLoadingRequests) {
@@ -73,7 +119,7 @@ export default function SubscriptionScreen() {
                 <View key={req.id} style={styles.requestContainer}>
                   <TouchableOpacity 
                     style={styles.requestCard}
-                    onPress={() => handleRequestPress(req.id, req.planId)}
+                    onPress={() => handleRequestPress(req)}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.requestPlanName}>{plan?.name || 'Subscription Plan'}</Text>
@@ -239,6 +285,17 @@ export default function SubscriptionScreen() {
             ))}
           </View>
         )}
+
+        {/* View History Link */}
+        <View style={{ alignItems: 'center', marginTop: Spacing.md }}>
+          <TouchableOpacity
+            style={styles.historyButton}
+            onPress={() => router.push('/(tabs)/(profile)/payment-history' as any)}
+          >
+            <Ionicons name="time-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
+            <Text style={styles.historyButtonText}>View Request & Payment History</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <CustomerPaymentProofModal
@@ -336,6 +393,21 @@ const styles = StyleSheet.create({
   },
   viewProofRequestBtnText: {
     fontSize: Typography.size.xs,
+    fontFamily: Typography.family.medium,
+    color: Colors.primary,
+  },
+  historyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primaryBg,
+    borderWidth: 1,
+    borderColor: Colors.primaryLight,
+  },
+  historyButtonText: {
+    fontSize: Typography.size.sm,
     fontFamily: Typography.family.medium,
     color: Colors.primary,
   },

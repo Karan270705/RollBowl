@@ -4,7 +4,7 @@ import { KitchenHoliday } from '@/src/types/models';
 import { AppConfig } from '@/src/constants/config';
 import { parseTimeToDateIST } from '@/src/utils/operationalDate';
 
-export type OperationalStatus = 'HOLIDAY' | 'MENU_COMING_SOON' | 'ORDERING_OPEN' | 'ORDERING_CLOSED' | 'PICKUP_ACTIVE';
+export type OperationalStatus = 'HOLIDAY' | 'MENU_COMING_SOON' | 'MENU_SCHEDULED' | 'ORDERING_OPEN' | 'ORDERING_CLOSED' | 'PICKUP_ACTIVE';
 
 export interface OperationalFacts {
   operationalDate: string;
@@ -33,6 +33,13 @@ function setTimeOnDateIST(dateStr: string, timeStr: string): Date {
 export async function resolveOperationalFacts(stallId: string, resolvedOperationalDate: string): Promise<OperationalFacts> {
   const operationalDate = resolvedOperationalDate;
 
+  console.log('[INSTRUMENTATION: resolveOperationalFacts - INPUT]', JSON.stringify({
+    stallId,
+    resolvedOperationalDate,
+    operationalDate,
+    timestamp: new Date().toISOString(),
+  }, null, 2));
+
   // 1. Holiday Check
   const { data: holidayData } = await supabase
     .from('kitchen_holidays')
@@ -57,12 +64,25 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
   }
 
   // 2. Menu Check
-  const { data: menuData } = await supabase
+  console.log('[INSTRUMENTATION: resolveOperationalFacts - SUPABASE QUERY]', JSON.stringify({
+    table: 'menu_schedules',
+    filter_menu_date: operationalDate,
+    filter_is_published: true,
+    stallId,
+  }, null, 2));
+
+  const { data: menuData, error: menuDataError } = await supabase
     .from('menu_schedules')
     .select('*')
     .eq('menu_date', operationalDate)
     .eq('is_published', true)
     .maybeSingle();
+
+  console.log('[INSTRUMENTATION: resolveOperationalFacts - SUPABASE RESULT]', JSON.stringify({
+    operationalDate,
+    menuData: menuData || null,
+    error: menuDataError || null,
+  }, null, 2));
 
   if (!menuData) {
     return {
@@ -85,6 +105,23 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
   const pickupEndDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.PICKUP_END_TIME);
 
   const nowMs = Date.now();
+  const visibleFromMs = (menuData as any).visible_from ? new Date((menuData as any).visible_from).getTime() : 0;
+
+  if (Number.isFinite(visibleFromMs) && nowMs < visibleFromMs) {
+    return {
+      operationalDate,
+      status: 'MENU_SCHEDULED',
+      isHoliday: false,
+      holidayDetails: null,
+      hasPublishedMenu: false,
+      activeMenu: menuData as MenuSchedule,
+      canPlaceOrders: false,
+      pickupWindowOpen: false,
+      isPrepTime: false,
+      orderCutoff: (menuData as any).order_cutoff || '',
+    };
+  }
+
   const orderCutoffMs = orderCutoffDate.getTime();
   const pickupStartMs = pickupStartDate.getTime();
   const pickupEndMs = pickupEndDate.getTime();

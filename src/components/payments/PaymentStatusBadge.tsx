@@ -20,30 +20,32 @@ export function PaymentStatusBadge({ status, style }: Props) {
       textColor = Colors.textSecondary;
       break;
     case PaymentVerificationStatus.AWAITING_PROOF:
-      label = 'Screenshot Required';
+    case SubscriptionRequestStatus.AWAITING_PROOF:
+      label = 'Awaiting Screenshot';
       bgColor = Colors.warningLight;
       textColor = Colors.warning;
       break;
     case PaymentVerificationStatus.PENDING:
     case SubscriptionRequestStatus.VERIFICATION_PENDING:
-      label = 'Verification Pending';
+      label = 'Pending Verification';
       bgColor = Colors.infoLight;
       textColor = Colors.info;
       break;
     case PaymentVerificationStatus.VERIFIED:
     case SubscriptionRequestStatus.APPROVED:
-      label = 'Verified';
+      label = 'Approved & Active';
       bgColor = Colors.successLight;
       textColor = Colors.success;
       break;
     case PaymentVerificationStatus.REJECTED:
+    case SubscriptionRequestStatus.REJECTED:
       label = 'Rejected';
       bgColor = Colors.errorLight;
       textColor = Colors.error;
       break;
     case PaymentVerificationStatus.EXPIRED:
     case SubscriptionRequestStatus.CANCELLED:
-      label = 'Expired / Cancelled';
+      label = 'Cancelled';
       bgColor = Colors.surfaceElevated;
       textColor = Colors.textSecondary;
       break;

@@ -146,7 +146,7 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
           </View>
         )}
         {renderInventoryBadge() || (
-          !unavailable && meal.tags.length > 0 && (
+          !unavailable && meal.tags && meal.tags.length > 0 && (
             <View style={[styles.tagContainer, { backgroundColor: Colors.primary }]}>
               <Text style={styles.tag}>{meal.tags[0]}</Text>
             </View>
@@ -229,7 +229,7 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
       )}
       {/* Tag badge / Inventory Badge */}
       {renderInventoryBadge() || (
-        !unavailable && meal.tags.length > 0 && (
+        !unavailable && meal.tags && meal.tags.length > 0 && (
           <View style={[styles.tagContainer, { backgroundColor: Colors.primary }]}>
             <Text style={styles.tag}>{meal.tags[0]}</Text>
           </View>

@@ -63,7 +63,48 @@ export default function HomeScreen() {
         timestamp: new Date().toISOString(),
       }, null, 2));
     }
-  }, [targetDate, inventoryMode, activeBatchId, inventory.length]);
+
+    console.log('[INSTRUMENTATION: HOME SCREEN PIPELINE]', JSON.stringify({
+      primaryStallId: primaryStallId || 'none',
+      operationalContext: {
+        calendarDate: operationalContext.calendarDate,
+        resolvedOperationalDate: operationalContext.resolvedOperationalDate,
+        preparationDate: operationalContext.preparationDate,
+        reason: operationalContext.reason,
+        resolutionReason: operationalContext.resolutionReason,
+        isResolving: operationalContext.isResolving,
+      },
+      opFacts: opFacts ? {
+        operationalDate: opFacts.operationalDate,
+        status: opFacts.status,
+        hasPublishedMenu: opFacts.hasPublishedMenu,
+        activeMenuDate: opFacts.activeMenu?.menu_date || null,
+        activeMenuId: opFacts.activeMenu?.id || null,
+        canPlaceOrders: opFacts.canPlaceOrders,
+        pickupWindowOpen: opFacts.pickupWindowOpen,
+      } : null,
+      targetDate,
+      availableMealsCount: availableMeals.length,
+      inventoryCount: inventory.length,
+      inventoryMode,
+      activeBatchId: activeBatchId || null,
+      timestamp: new Date().toISOString(),
+    }, null, 2));
+  }, [
+    targetDate,
+    inventoryMode,
+    activeBatchId,
+    inventory.length,
+    primaryStallId,
+    operationalContext.calendarDate,
+    operationalContext.resolvedOperationalDate,
+    operationalContext.preparationDate,
+    operationalContext.reason,
+    operationalContext.resolutionReason,
+    operationalContext.isResolving,
+    opFacts,
+    availableMeals.length,
+  ]);
 
 
   // ─── Browse Catalog ───────────────────────────────────────
@@ -117,6 +158,25 @@ export default function HomeScreen() {
   }
 
   // ─── STATUS SWITCH ─────────────────────────────────────────
+
+  // MENU SCHEDULED (Published but before visible_from boundary)
+  if (opFacts.status === 'MENU_SCHEDULED') {
+    return (
+      <ScreenWrapper>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+            <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+          </View>
+        </View>
+        <EmptyState
+          icon="time-outline"
+          title="Menu Scheduled"
+          subtitle="Menu will be available at 4:00 PM"
+        />
+      </ScreenWrapper>
+    );
+  }
 
   // MENU COMING SOON
   if (opFacts.status === 'MENU_COMING_SOON') {

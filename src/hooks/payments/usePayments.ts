@@ -52,6 +52,9 @@ export function useCreateSubscriptionRequest() {
       queryClient.invalidateQueries({
         queryKey: ['subscriptionRequests'],
       });
+      queryClient.invalidateQueries({
+        queryKey: ['subscriptions'],
+      });
     },
   });
 }
@@ -66,7 +69,10 @@ export function useSubmitSubscriptionProof() {
         queryKey: queryKeys.subscriptionRequests.detail(variables.requestId),
       });
       queryClient.invalidateQueries({
-        queryKey: ['subscriptionRequests', 'list'],
+        queryKey: ['subscriptionRequests'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['subscriptions'],
       });
     },
   });
@@ -77,6 +83,8 @@ export function useSubscriptionRequests(userId: string | undefined) {
     queryKey: queryKeys.subscriptionRequests.list(userId || ''),
     queryFn: () => fetchSubscriptionPurchaseRequests(userId!),
     enabled: !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

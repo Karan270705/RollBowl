@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii } from '@/src/constants/theme';
 import { ScreenWrapper } from '@/src/components/layout';
@@ -10,39 +10,46 @@ const { width } = Dimensions.get('window');
 
 export default function SubscriptionSuccessScreen() {
   const router = useRouter();
+  const { isReplacement } = useLocalSearchParams<{ isReplacement?: string }>();
+
+  const titleText = isReplacement === 'true'
+    ? 'New payment proof submitted'
+    : 'Payment proof submitted';
+
+  const bodyText = isReplacement === 'true'
+    ? 'New payment proof submitted. Your request is waiting for kitchen verification.'
+    : 'Your screenshot has been received. Your subscription will be activated after the kitchen verifies and approves the payment.';
 
   return (
     <ScreenWrapper>
       <View style={styles.container}>
         <View style={styles.iconCircle}>
-          <Ionicons name="checkmark-circle" size={80} color={Colors.success} />
+          <Ionicons name="time-outline" size={80} color={Colors.primary} />
         </View>
 
-        <Text style={styles.title}>You're Subscribed!</Text>
-        <Text style={styles.subtitle}>
-          Your subscription is now active. You can manage your items from your profile.
-        </Text>
+        <Text style={styles.title}>{titleText}</Text>
+        <Text style={styles.subtitle}>{bodyText}</Text>
 
         <View style={styles.infoBox}>
           <View style={styles.infoRow}>
-            <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
-            <Text style={styles.infoText}>Next billing date: Next Week</Text>
+            <Ionicons name="shield-checkmark-outline" size={20} color={Colors.primary} />
+            <Text style={styles.infoText}>Status: Pending Verification</Text>
           </View>
           <View style={styles.infoRow}>
-            <Ionicons name="restaurant-outline" size={20} color={Colors.primary} />
-            <Text style={styles.infoText}>Ready to pick your items?</Text>
+            <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
+            <Text style={styles.infoText}>You will be notified once verified by Kitchen</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.footer}>
         <Button 
-          title="Go to Home" 
-          onPress={() => router.replace('/(tabs)/(home)' as any)} 
+          title="View Request Status" 
+          onPress={() => router.replace('/(tabs)/(subscription)' as any)} 
           fullWidth 
         />
         <Button 
-          title="View Subscription Details" 
+          title="Back to Subscriptions" 
           variant="outline"
           onPress={() => router.replace('/(tabs)/(subscription)' as any)} 
           fullWidth 
@@ -64,7 +71,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.success + '20',
+    backgroundColor: Colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: Spacing.xl,
@@ -98,8 +105,8 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: Typography.size.base,
     color: Colors.textPrimary,
-    marginLeft: Spacing.sm,
-    fontFamily: Typography.family.medium,
+    marginLeft: Spacing.md,
+    flex: 1,
   },
   footer: {
     padding: Spacing.xl,
