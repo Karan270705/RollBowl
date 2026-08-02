@@ -43,13 +43,18 @@ type CheckoutState =
   | 'COMPLETED'
   | 'FAILED';
 
+export type CheckoutPaymentMode =
+  | 'FULLY_SUBSCRIPTION_COVERED'
+  | 'PARTIALLY_SUBSCRIPTION_COVERED'
+  | 'DIRECT_PAYMENT';
+
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, cartPickupDate, clearCart, updateQuantity, removeItem } = useCartStore();
   const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
   const user = useUser();
-  const [pickupSlot, setPickupSlot] = useState<string>("12:00-12:30");
+  const [pickupSlot, setPickupSlot] = useState<string>("12:00 PM - 12:30 PM");
   
   // Staged Checkout state
   const [checkoutState, setCheckoutState] = useState<CheckoutState>('REVIEW');
@@ -151,20 +156,60 @@ export default function CheckoutScreen() {
     }
   }, [opFacts, cartPickupDate, activeBatch]);
 
-  // Engine logic
+  // Authoritative Engine calculation & Backend-Aligned Totals
   const engineResult = processSubscription(
     items,
     subscription || null,
     plan || null,
     opFacts?.operationalDate || "",
   );
+
+  const grossSubtotal = items.reduce((sum, item) => sum + (item.meal.price * item.quantity), 0);
+  const grossTax = Math.round(grossSubtotal * 0.05);
+  const grossOrderAmount = Math.round((grossSubtotal + grossTax) * 100) / 100;
+
   const subtotal = engineResult.newSubtotal;
   const tax = Math.round(subtotal * 0.05);
-  const frontendTotal = subtotal + tax;
-  const isSubscriptionApplied = engineResult.subscriptionUpdates !== null;
-  const isFullyCoveredBySubscription = items.length > 0 && frontendTotal === 0 && isSubscriptionApplied;
-
+  const frontendTotal = Math.round((subtotal + tax) * 100) / 100;
   const displayTotal = backendTotal !== null ? backendTotal : frontendTotal;
+  const remainingPayableAmount = Math.round(displayTotal * 100) / 100;
+
+  const isSubscriptionApplied = engineResult.subscriptionUpdates !== null;
+  const isSubActiveAndApplied = Boolean(isSubscriptionApplied && subscription && subscription.status === 'active');
+  const subscriptionCoveredAmount = isSubActiveAndApplied
+    ? Math.round(Math.max(0, grossOrderAmount - remainingPayableAmount) * 100) / 100
+    : 0;
+
+  const paymentMode: CheckoutPaymentMode = (() => {
+    if (subscriptionCoveredAmount > 0 && remainingPayableAmount === 0) {
+      return 'FULLY_SUBSCRIPTION_COVERED';
+    }
+    if (subscriptionCoveredAmount > 0 && remainingPayableAmount > 0) {
+      return 'PARTIALLY_SUBSCRIPTION_COVERED';
+    }
+    return 'DIRECT_PAYMENT';
+  })();
+
+  const isFullyCoveredBySubscription = paymentMode === 'FULLY_SUBSCRIPTION_COVERED';
+
+  useEffect(() => {
+    if (paymentMode === 'FULLY_SUBSCRIPTION_COVERED') {
+      setPayment('' as PaymentMethod);
+      setSelectedImage(null);
+    } else if (!payment) {
+      setPayment(PaymentMethod.UPI);
+    }
+  }, [paymentMode, payment]);
+
+  const placeOrderButtonTitle = (() => {
+    if (paymentMode === 'FULLY_SUBSCRIPTION_COVERED') {
+      return "Place Order • Covered by Subscription";
+    }
+    if (paymentMode === 'PARTIALLY_SUBSCRIPTION_COVERED') {
+      return `Place Order • ${formatCurrency(remainingPayableAmount)}`;
+    }
+    return `Place Order • ${formatCurrency(displayTotal)}`;
+  })();
 
   const canOrder = 
     opFacts?.status === "ORDERING_OPEN" && 
@@ -206,11 +251,24 @@ export default function CheckoutScreen() {
         return;
       }
 
-      // 9. verify a payment method is selected
-      if (!payment && !isFullyCoveredBySubscription) {
-        alert("Select a payment method before placing your order.");
-        setCheckoutState('REVIEW');
-        return;
+      // 9. verify payment selection and authoritative coverage contract
+      if (paymentMode === 'FULLY_SUBSCRIPTION_COVERED') {
+        if (remainingPayableAmount !== 0) {
+          alert("Order payment calculation mismatch. Please review your cart.");
+          setCheckoutState('REVIEW');
+          return;
+        }
+      } else {
+        if (remainingPayableAmount <= 0) {
+          alert("Order payment calculation mismatch. Please review your cart.");
+          setCheckoutState('REVIEW');
+          return;
+        }
+        if (!payment) {
+          alert("Select a payment method before placing your order.");
+          setCheckoutState('REVIEW');
+          return;
+        }
       }
 
       // 4. refetch operational facts
@@ -494,10 +552,10 @@ export default function CheckoutScreen() {
                   <Text style={styles.cardTitle}>Expected Pickup Time</Text>
                   <View style={styles.chipContainer}>
                     {[
-                      { label: "12:00–12:30", value: "12:00-12:30" },
-                      { label: "12:30–1:00", value: "12:30-13:00" },
-                      { label: "1:00–1:30", value: "13:00-13:30" },
-                      { label: "1:30–2:00", value: "13:30-14:00" },
+                      { label: "12:00–12:30", value: "12:00 PM - 12:30 PM" },
+                      { label: "12:30–1:00", value: "12:30 PM - 01:00 PM" },
+                      { label: "1:00–1:30", value: "01:00 PM - 01:30 PM" },
+                      { label: "1:30–2:00", value: "01:30 PM - 02:00 PM" },
                     ].map((slot) => (
                       <TouchableOpacity
                         key={slot.value}
@@ -555,7 +613,17 @@ export default function CheckoutScreen() {
               </>
             )}
 
-            {!isFullyCoveredBySubscription && !isRecovering && (
+            {paymentMode === 'FULLY_SUBSCRIPTION_COVERED' && !isRecovering && (
+              <View style={[styles.card, { backgroundColor: Colors.primaryLight, borderColor: Colors.primary, borderWidth: 1 }, isLocked && { opacity: 0.6 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs }}>
+                  <Ionicons name="shield-checkmark" size={22} color={Colors.primary} style={{ marginRight: Spacing.sm }} />
+                  <Text style={[styles.cardTitle, { color: Colors.primaryDark, marginBottom: 0 }]}>Covered by your subscription</Text>
+                </View>
+                <Text style={{ fontSize: 14, color: Colors.textSecondary }}>0 additional payment required</Text>
+              </View>
+            )}
+
+            {paymentMode !== 'FULLY_SUBSCRIPTION_COVERED' && !isRecovering && (
               <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
                 <Text style={styles.cardTitle}>Payment Method</Text>
                 {[
@@ -585,35 +653,59 @@ export default function CheckoutScreen() {
 
             {!isRecovering && (
               <View style={[styles.totalCard, isLocked && { opacity: 0.6 }]}>
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Subtotal</Text>
-                  <Text style={styles.totalVal}>{formatCurrency(subtotal)}</Text>
-                </View>
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Tax</Text>
-                  <Text style={styles.totalVal}>{formatCurrency(tax)}</Text>
-                </View>
-                <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
-                  <Text style={styles.grandLabel}>Total</Text>
-                  <Text style={styles.grandVal}>{formatCurrency(displayTotal)}</Text>
-                </View>
+                {subscriptionCoveredAmount > 0 ? (
+                  <>
+                    <View style={styles.totalRow}>
+                      <Text style={styles.totalLabel}>Order Total</Text>
+                      <Text style={styles.totalVal}>{formatCurrency(grossOrderAmount)}</Text>
+                    </View>
+                    <View style={styles.totalRow}>
+                      <Text style={[styles.totalLabel, { color: Colors.primary }]}>Subscription Covered</Text>
+                      <Text style={[styles.totalVal, { color: Colors.primary }]}>-{formatCurrency(subscriptionCoveredAmount)}</Text>
+                    </View>
+                    <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
+                      <Text style={styles.grandLabel}>Amount Payable</Text>
+                      <Text style={styles.grandVal}>{formatCurrency(remainingPayableAmount)}</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.totalRow}>
+                      <Text style={styles.totalLabel}>Subtotal</Text>
+                      <Text style={styles.totalVal}>{formatCurrency(subtotal)}</Text>
+                    </View>
+                    <View style={styles.totalRow}>
+                      <Text style={styles.totalLabel}>Tax</Text>
+                      <Text style={styles.totalVal}>{formatCurrency(tax)}</Text>
+                    </View>
+                    <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: Spacing.sm }]}>
+                      <Text style={styles.grandLabel}>Total</Text>
+                      <Text style={styles.grandVal}>{formatCurrency(displayTotal)}</Text>
+                    </View>
+                  </>
+                )}
               </View>
             )}
 
             {/* Stage 1: UPI Panel & Screenshot selection in REVIEW before Place Order */}
-            {!isRecovering && payment === PaymentMethod.UPI && paymentSettings && (
+            {!isRecovering &&
+              remainingPayableAmount > 0 &&
+              payment === PaymentMethod.UPI &&
+              paymentSettings && (
               <View style={{ marginTop: Spacing.sm, marginBottom: Spacing.base }}>
                 <UpiPaymentPanel
-                  amount={displayTotal}
+                  amount={remainingPayableAmount}
                   recipientName={paymentSettings.recipientName}
                   upiId={paymentSettings.upiId}
                   qrImagePath={paymentSettings.qrImagePath}
                 >
-                  <PaymentScreenshotPicker
-                    onImageSelected={setSelectedImage}
-                    selectedImage={selectedImage}
-                    isUploading={isUploading}
-                  />
+                  {remainingPayableAmount > 0 && payment === PaymentMethod.UPI && (
+                    <PaymentScreenshotPicker
+                      onImageSelected={setSelectedImage}
+                      selectedImage={selectedImage}
+                      isUploading={isUploading}
+                    />
+                  )}
                 </UpiPaymentPanel>
               </View>
             )}
@@ -621,7 +713,7 @@ export default function CheckoutScreen() {
             {/* Stage 1: Order Creation Button */}
             {!isRecovering && (
               <Button
-                title={`Place Order • ${formatCurrency(displayTotal)}`}
+                title={placeOrderButtonTitle}
                 onPress={handlePlaceOrder}
                 fullWidth
                 size="lg"
@@ -635,7 +727,7 @@ export default function CheckoutScreen() {
             {(isRecovering) && payment === PaymentMethod.UPI && paymentSettings && (
               <View style={{ marginTop: Spacing.md }}>
                 <UpiPaymentPanel
-                  amount={displayTotal}
+                  amount={remainingPayableAmount}
                   recipientName={paymentSettings.recipientName}
                   upiId={paymentSettings.upiId}
                   qrImagePath={paymentSettings.qrImagePath}
