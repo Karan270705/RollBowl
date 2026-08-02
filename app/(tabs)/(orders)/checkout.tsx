@@ -329,7 +329,7 @@ export default function CheckoutScreen() {
         return;
       }
 
-      const resolvedPaymentMethod = isFullyCoveredBySubscription ? PaymentMethod.CASH : payment;
+      const resolvedPaymentMethod = isFullyCoveredBySubscription ? PaymentMethod.SUBSCRIPTION : payment;
       const totalCartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
       // Diagnostic log: [PLACE ORDER INTENT]

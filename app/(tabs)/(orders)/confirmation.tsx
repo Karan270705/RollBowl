@@ -7,6 +7,7 @@ import { Button } from '@/src/components/ui';
 import { fetchOrderById } from '@/src/services/orders';
 import { Order } from '@/src/types/models';
 import { PaymentMethod, PaymentVerificationStatus, PaymentStatus } from '@/src/constants/enums';
+import { resolveOrderPaymentDisplay } from '@/src/utils/paymentDisplay';
 
 export default function ConfirmationScreen() {
   const router = useRouter();
@@ -35,18 +36,21 @@ export default function ConfirmationScreen() {
   let statusText = 'Pending';
   let isAwaitingProof = false;
   let statusColor: string = Colors.primary;
+  let subtitleText = 'Your order has been saved.';
 
   if (order) {
-    if (order.paymentMethod === PaymentMethod.CASH && order.paymentStatus === PaymentStatus.PENDING) {
-      statusText = 'Cash due at pickup';
-    } else if (order.paymentMethod === PaymentMethod.UPI) {
-      if (order.paymentVerificationStatus === PaymentVerificationStatus.AWAITING_PROOF) {
-        statusText = 'Payment screenshot required';
-        isAwaitingProof = true;
-        statusColor = Colors.warning;
-      } else if (order.paymentVerificationStatus === PaymentVerificationStatus.PENDING) {
-        statusText = 'Payment verification pending';
-      }
+    const display = resolveOrderPaymentDisplay(order);
+    statusText = display.label;
+    isAwaitingProof = display.type === 'UPI_PENDING_PROOF';
+    if (display.type === 'SUBSCRIPTION') {
+      statusColor = Colors.success;
+      subtitleText = 'Your subscription meal has been scheduled.';
+    } else if (display.type === 'PAID') {
+      statusColor = Colors.success;
+    } else if (isAwaitingProof) {
+      statusColor = Colors.warning;
+    } else {
+      statusColor = Colors.primary;
     }
   }
 
@@ -56,7 +60,7 @@ export default function ConfirmationScreen() {
         <Ionicons name={isAwaitingProof ? "time-outline" : "checkmark-circle"} size={72} color={isAwaitingProof ? Colors.warning : Colors.success} />
       </View>
       <Text style={styles.title}>Order Placed! 🎉</Text>
-      <Text style={styles.subtitle}>Your order has been saved.</Text>
+      <Text style={styles.subtitle}>{subtitleText}</Text>
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Status</Text>

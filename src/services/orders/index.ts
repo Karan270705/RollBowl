@@ -185,6 +185,7 @@ export async function placeOrder(
     items: items.map(item => ({
       mealId: item.meal.id,
       quantity: item.quantity,
+      isSubscriptionItem: !!item.subscriptionId,
       useSubscription: !!item.subscriptionId
     })),
     pickupDate,
@@ -217,6 +218,17 @@ export async function placeOrder(
 
   // Return the fetched order to match signature
   const createdOrder = await fetchOrderById(orderId);
+
+  console.log('[SUBSCRIPTION ORDER RAW RESULT]', JSON.stringify({
+    id: createdOrder.id,
+    order_type: createdOrder.orderType,
+    payment_method: createdOrder.paymentMethod,
+    payment_status: createdOrder.paymentStatus,
+    payment_verification_status: createdOrder.paymentVerificationStatus,
+    total: createdOrder.total,
+    amount_due: createdOrder.total,
+    subscription_id: createdOrder.items.find(i => i.subscriptionId)?.subscriptionId || subscriptionId,
+  }, null, 2));
 
   console.log('[CUSTOMER ORDER CREATED]', {
     orderId: createdOrder.id,

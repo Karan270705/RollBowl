@@ -4,6 +4,7 @@ import { OrderStatus, PaymentMethodLabels, PaymentStatus, PaymentVerificationSta
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/src/constants/theme';
 import { useOrder } from '@/src/hooks';
 import { formatCurrency, formatRelativeTime, formatFriendlyDate } from '@/src/utils/formatters';
+import { resolveOrderPaymentDisplay } from '@/src/utils/paymentDisplay';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -49,6 +50,19 @@ export default function OrderDetailsScreen() {
       </ScreenWrapper>
     );
   }
+
+  console.log('[SUBSCRIPTION ORDER DETAILS RAW]', JSON.stringify({
+    id: order.id,
+    order_type: order.orderType,
+    payment_method: order.paymentMethod,
+    payment_status: order.paymentStatus,
+    payment_verification_status: order.paymentVerificationStatus,
+    total: order.total,
+    amount_due: order.total,
+    subscription_id: order.items.find(i => i.subscriptionId)?.subscriptionId,
+  }, null, 2));
+
+  const paymentDisplay = resolveOrderPaymentDisplay(order);
 
   const handleUploadProof = async () => {
     if (!user || !order || !selectedImage) return;
@@ -165,23 +179,26 @@ export default function OrderDetailsScreen() {
               <Text style={styles.summaryLabel}>Payment Method</Text>
               <Text style={styles.summaryValue}>{PaymentMethodLabels[order.paymentMethod] || 'Unknown'}</Text>
             </View>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Payment Status</Text>
+              <Text style={[
+                styles.summaryValue, 
+                { 
+                  color: 
+                    paymentDisplay.type === 'SUBSCRIPTION' || paymentDisplay.type === 'PAID' 
+                      ? Colors.success 
+                      : Colors.warning 
+                }
+              ]}>
+                {paymentDisplay.label}
+              </Text>
+            </View>
             
             {order.paymentMethod === PaymentMethod.UPI && (
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Verification Status</Text>
                 <PaymentStatusBadge status={order.paymentVerificationStatus} />
-              </View>
-            )}
-            
-            {order.paymentMethod === PaymentMethod.CASH && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Payment Status</Text>
-                <Text style={[
-                  styles.summaryValue, 
-                  { color: order.paymentStatus === PaymentStatus.PENDING ? Colors.warning : Colors.success }
-                ]}>
-                  {order.paymentStatus === PaymentStatus.PENDING ? 'Cash due at pickup' : 'Paid'}
-                </Text>
               </View>
             )}
 

@@ -38,6 +38,7 @@ export enum PaymentMethod {
   UPI = 'upi',
   CARD = 'card',
   CASH = 'cash',
+  SUBSCRIPTION = 'subscription',
 }
 
 export enum SubscriptionStatus {
@@ -105,4 +106,5 @@ export const PaymentMethodLabels: Record<PaymentMethod, string> = {
   [PaymentMethod.UPI]: 'UPI',
   [PaymentMethod.CARD]: 'Debit/Credit Card',
   [PaymentMethod.CASH]: 'Cash on Pickup',
+  [PaymentMethod.SUBSCRIPTION]: 'Covered by subscription',
 };
