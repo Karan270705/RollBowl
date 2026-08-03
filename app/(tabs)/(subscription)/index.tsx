@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -6,7 +6,7 @@ import { ScreenWrapper } from '@/src/components/layout';
 import { Button } from '@/src/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@/src/store';
-import { useActiveSubscription, useSubscriptionPlans, useSubscriptionUsageHistory } from '@/src/hooks';
+import { useActiveSubscription, useSubscriptionPlans, useSubscriptionUsageHistory, useOperationalWindow } from '@/src/hooks';
 import { useSubscriptionRequests } from '@/src/hooks/payments/usePayments';
 import { formatCurrency, formatFriendlyDate, formatRelativeTime } from '@/src/utils/formatters';
 import { PaymentStatusBadge } from '@/src/components/payments/PaymentStatusBadge';
@@ -20,6 +20,33 @@ export default function SubscriptionScreen() {
   const { data: plans, isLoading: isLoadingPlans } = useSubscriptionPlans();
   const { data: history = [], isLoading: isLoadingHistory } = useSubscriptionUsageHistory(subscription?.id);
   const { data: requests = [], isLoading: isLoadingRequests } = useSubscriptionRequests(user?.id);
+  const { targetDate: resolvedServiceDate } = useOperationalWindow();
+  const currentServiceDate = resolvedServiceDate || new Date().toISOString().split('T')[0];
+
+  const storedDailyCreditsUsed = subscription?.dailyCreditsUsed || 0;
+  const effectiveDailyCreditsUsed =
+    subscription && subscription.lastUsageDate === currentServiceDate
+      ? storedDailyCreditsUsed
+      : 0;
+  const leftToday = subscription
+    ? Math.max(0, (subscription.mealsPerDay || 0) - effectiveDailyCreditsUsed)
+    : 0;
+
+  useEffect(() => {
+    if (__DEV__ && subscription) {
+      console.log('[SUBSCRIPTION DAILY CREDIT DISPLAY]', {
+        subscriptionId: subscription.id,
+        resolvedServiceDate: currentServiceDate,
+        lastUsageDate: subscription.lastUsageDate || null,
+        storedDailyCreditsUsed,
+        effectiveDailyCreditsUsed,
+        mealsPerDay: subscription.mealsPerDay,
+        leftToday,
+        consumedMeals: subscription.consumedMeals,
+        remainingMeals: subscription.remainingMeals,
+      });
+    }
+  }, [subscription, currentServiceDate, storedDailyCreditsUsed, effectiveDailyCreditsUsed, leftToday]);
 
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isProofModalVisible, setIsProofModalVisible] = useState(false);
@@ -194,11 +221,7 @@ export default function SubscriptionScreen() {
               </View>
               <View style={styles.statBox}>
                 <Text style={styles.statLabel}>Left Today</Text>
-                <Text style={styles.statValue}>
-                  {subscription.lastUsageDate && subscription.lastUsageDate >= new Date().toISOString().split('T')[0] 
-                    ? Math.max(0, subscription.mealsPerDay - subscription.dailyCreditsUsed) 
-                    : subscription.mealsPerDay}
-                </Text>
+                <Text style={styles.statValue}>{leftToday}</Text>
               </View>
             </View>
 
@@ -290,7 +313,7 @@ export default function SubscriptionScreen() {
         <View style={{ alignItems: 'center', marginTop: Spacing.md }}>
           <TouchableOpacity
             style={styles.historyButton}
-            onPress={() => router.push('/(tabs)/(profile)/payment-history' as any)}
+            onPress={() => router.push('/(tabs)/(subscription)/payment-history' as any)}
           >
             <Ionicons name="time-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
             <Text style={styles.historyButtonText}>View Request & Payment History</Text>

@@ -1,18 +1,34 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
 
-const FAQS = [
-  { question: 'How do I cancel my subscription?', answer: 'You can cancel your subscription at any time from the Subscription tab. Your plan will remain active until the end of the current billing cycle.' },
-  { question: 'What happens if I miss an item pickup?', answer: 'Unclaimed items will expire at the end of the service period and cannot be rolled over to the next day.' },
-  { question: 'How can I change my dietary preferences?', answer: 'You can update your dietary preferences in the Edit Profile screen.' },
-];
+const SUPPORT_PHONE = '+91 XXXXX XXXXX';
+const SUPPORT_EMAIL = 'support@rollbowl.in';
 
 export default function HelpScreen() {
   const router = useRouter();
+
+  const copyToClipboard = async (text: string, label: string) => {
+    await Clipboard.setStringAsync(text);
+    Alert.alert('Copied', `${label} copied to clipboard.`);
+  };
+
+  const openDialer = () => {
+    Linking.openURL('tel:+91XXXXXXXXXX').catch(() => {
+      Alert.alert('Error', 'Could not open phone dialer.');
+    });
+  };
+
+  const openEmail = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => {
+      Alert.alert('Error', 'Could not open email app.');
+    });
+  };
 
   return (
     <ScreenWrapper>
@@ -24,41 +40,67 @@ export default function HelpScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        
-        <Section title="Contact Us">
-          <View style={styles.contactContainer}>
-            <TouchableOpacity style={styles.contactCard}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="chatbubbles-outline" size={24} color={Colors.primary} />
-              </View>
-              <Text style={styles.contactTitle}>Live Chat</Text>
-              <Text style={styles.contactSubtitle}>Typical reply in 5m</Text>
-            </TouchableOpacity>
+        <View style={styles.infoCard}>
+          <Text style={styles.headingText}>Need help?</Text>
+          <Text style={styles.bodyText}>
+            For support regarding orders, subscriptions or payments, contact us.
+          </Text>
+        </View>
 
-            <TouchableOpacity style={styles.contactCard}>
+        <Section title="Contact Information">
+          <View style={styles.card}>
+            <View style={styles.row}>
               <View style={styles.iconCircle}>
-                <Ionicons name="mail-outline" size={24} color={Colors.primary} />
+                <Ionicons name="call-outline" size={20} color={Colors.primary} />
               </View>
-              <Text style={styles.contactTitle}>Email Us</Text>
-              <Text style={styles.contactSubtitle}>support@rollbowl.com</Text>
-            </TouchableOpacity>
+              <View style={styles.details}>
+                <Text style={styles.label}>Phone</Text>
+                <Text style={styles.value}>{SUPPORT_PHONE}</Text>
+              </View>
+              <View style={styles.actions}>
+                <TouchableOpacity onPress={openDialer} style={styles.actionBtn}>
+                  <Ionicons name="call" size={18} color={Colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => copyToClipboard(SUPPORT_PHONE, 'Phone number')} style={styles.actionBtn}>
+                  <Ionicons name="copy-outline" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="mail-outline" size={20} color={Colors.primary} />
+              </View>
+              <View style={styles.details}>
+                <Text style={styles.label}>Email</Text>
+                <Text style={styles.value}>{SUPPORT_EMAIL}</Text>
+              </View>
+              <View style={styles.actions}>
+                <TouchableOpacity onPress={openEmail} style={styles.actionBtn}>
+                  <Ionicons name="mail" size={18} color={Colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => copyToClipboard(SUPPORT_EMAIL, 'Email address')} style={styles.actionBtn}>
+                  <Ionicons name="copy-outline" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="time-outline" size={20} color={Colors.primary} />
+              </View>
+              <View style={styles.details}>
+                <Text style={styles.label}>Working Hours</Text>
+                <Text style={styles.value}>Mon–Sat</Text>
+                <Text style={styles.subValue}>9:00 AM – 8:00 PM</Text>
+              </View>
+            </View>
           </View>
         </Section>
-
-        <Section title="Frequently Asked Questions">
-          <View style={styles.faqCard}>
-            {FAQS.map((faq, index) => (
-              <View key={index}>
-                <View style={styles.faqItem}>
-                  <Text style={styles.question}>{faq.question}</Text>
-                  <Text style={styles.answer}>{faq.answer}</Text>
-                </View>
-                {index < FAQS.length - 1 && <View style={styles.divider} />}
-              </View>
-            ))}
-          </View>
-        </Section>
-
       </ScrollView>
     </ScreenWrapper>
   );
@@ -82,59 +124,74 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: Spacing.xl,
   },
-  contactContainer: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  contactCard: {
-    flex: 1,
+  infoCard: {
     backgroundColor: Colors.surface,
     borderRadius: Radii.lg,
     padding: Spacing.lg,
-    alignItems: 'center',
+    marginBottom: Spacing.lg,
     ...Shadows.sm,
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.primaryBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  contactTitle: {
-    fontSize: Typography.size.base,
-    fontFamily: Typography.family.semiBold,
-    color: Colors.textPrimary,
-  },
-  contactSubtitle: {
-    fontSize: Typography.size.xs,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  faqCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radii.lg,
-    paddingHorizontal: Spacing.lg,
-    ...Shadows.sm,
-  },
-  faqItem: {
-    paddingVertical: Spacing.md,
-  },
-  question: {
-    fontSize: Typography.size.base,
-    fontFamily: Typography.family.medium,
+  headingText: {
+    fontSize: Typography.size.lg,
+    fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
     marginBottom: Spacing.xs,
   },
-  answer: {
+  bodyText: {
     fontSize: Typography.size.sm,
     color: Colors.textSecondary,
     lineHeight: 20,
   },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    padding: Spacing.lg,
+    ...Shadows.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primaryBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  details: {
+    flex: 1,
+  },
+  label: {
+    fontSize: Typography.size.xs,
+    fontFamily: Typography.family.medium,
+    color: Colors.textSecondary,
+  },
+  value: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+    marginTop: 2,
+  },
+  subValue: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBtn: {
+    padding: Spacing.sm,
+    marginLeft: Spacing.xs,
+  },
   divider: {
     height: 1,
     backgroundColor: Colors.borderLight,
+    marginVertical: Spacing.sm,
   },
 });

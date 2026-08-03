@@ -10,8 +10,6 @@ import { MOCK_COLLEGES, MOCK_CITIES } from '@/src/constants/mockData';
 import { getInitials } from '@/src/utils/formatters';
 
 const MENU_ITEMS = [
-  { icon: 'location-outline' as const, label: 'Saved Addresses', route: '/(tabs)/(profile)/addresses' },
-  { icon: 'card-outline' as const, label: 'Payment History', route: '/(tabs)/(profile)/payment-history' },
   { icon: 'settings-outline' as const, label: 'Settings', route: '/(tabs)/(profile)/settings' },
   { icon: 'help-circle-outline' as const, label: 'Help & Support', route: '/(tabs)/(profile)/help' },
   { icon: 'document-text-outline' as const, label: 'Terms & Privacy', route: '/(tabs)/(profile)/terms' },

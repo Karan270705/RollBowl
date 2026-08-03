@@ -45,7 +45,7 @@ export default function OtpVerificationScreen() {
         <Button title="Verify" onPress={handleVerify} fullWidth size="lg" />
 
         <View style={styles.resendRow}>
-          <Text style={styles.resendText}>Didn't receive code? </Text>
+          <Text style={styles.resendText}>{"Didn't receive code? "}</Text>
           <Text style={styles.resendLink}>Resend</Text>
         </View>
       </View>

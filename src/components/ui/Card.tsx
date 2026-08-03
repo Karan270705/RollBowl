@@ -17,6 +17,8 @@ export const Card: React.FC<CardProps> = ({ children, variant = 'elevated', padd
   );
 };
 
+export const AppCard = Card;
+
 const styles = StyleSheet.create({
   base: {
     borderRadius: Radii.lg,

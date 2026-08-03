@@ -44,7 +44,7 @@ export default function OrderDetailsScreen() {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={Colors.error} />
           <Text style={styles.errorTitle}>Order Not Found</Text>
-          <Text style={styles.errorText}>We couldn't find the details for this order.</Text>
+          <Text style={styles.errorText}>We could not find the details for this order.</Text>
           <Button title="Back to Orders" onPress={() => router.back()} style={{ marginTop: Spacing.xl }} />
         </View>
       </ScreenWrapper>

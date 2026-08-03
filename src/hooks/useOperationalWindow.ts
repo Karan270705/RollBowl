@@ -10,7 +10,9 @@ import { supabase } from '@/src/lib/supabase';
  */
 export function useOperationalWindow() {
   const { data: primaryStallId } = usePrimaryStallId();
-  const { resolvedOperationalDate, preparationDate, calendarDate, isResolving } = useOperationalContext(primaryStallId);
+  const operationalContext = useOperationalContext(primaryStallId);
+  const { resolvedOperationalDate, preparationDate, calendarDate, isResolving } = operationalContext;
+  const isValidStall = Boolean(primaryStallId && primaryStallId !== 'none');
   const targetDate = resolvedOperationalDate || preparationDate || calendarDate;
   const queryClient = useQueryClient();
 
@@ -42,16 +44,18 @@ export function useOperationalWindow() {
     }
 
     return () => {
-      void supabase.removeChannel(channel!);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
-  }, [primaryStallId, queryClient]);
+  }, [isValidStall, primaryStallId, queryClient]);
 
-  const query = useQuery<OperationalFacts>({
+  const query = useQuery<OperationalFacts, Error>({
     queryKey: ['operationalWindow', primaryStallId, targetDate],
     queryFn: () => resolveOperationalFacts(primaryStallId!, targetDate!),
-    enabled: !!primaryStallId && !!targetDate && !isResolving,
+    enabled: isValidStall && !!targetDate && !isResolving,
     refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   // Schedule a single one-time refresh at visible_from boundary when future published menu exists
@@ -78,6 +82,10 @@ export function useOperationalWindow() {
     }
   }, [query.data?.status, query.data?.activeMenu, queryClient]);
 
-  return query;
+  return {
+    ...query,
+    operationalContext,
+    targetDate,
+    primaryStallId,
+  };
 }
-

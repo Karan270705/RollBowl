@@ -9,7 +9,7 @@ export default function NotFoundScreen() {
     <View style={styles.container}>
       <Text style={styles.emoji}>🤷</Text>
       <Text style={styles.title}>Page Not Found</Text>
-      <Text style={styles.subtitle}>This screen doesn't exist.</Text>
+      <Text style={styles.subtitle}>This screen does not exist.</Text>
       <Button title="Go Home" onPress={() => router.replace('/')} variant="outline" />
     </View>
   );

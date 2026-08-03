@@ -2,7 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import { Colors, Typography, Spacing, Radii } from '@/src/constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
@@ -38,7 +38,7 @@ export const Button: React.FC<ButtonProps> = ({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? Colors.white : Colors.primary} size="small" />
+        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? Colors.white : Colors.primary} size="small" />
       ) : (
         <>
           {leftIcon}
@@ -51,15 +51,19 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
+export const AppButton = Button;
+
 const styles = StyleSheet.create({
   base: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     borderRadius: Radii.md, gap: Spacing.sm,
+    minHeight: 44, minWidth: 44,
   },
   primary: { backgroundColor: Colors.primary },
   secondary: { backgroundColor: Colors.primaryBg },
   outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: Colors.primary },
   ghost: { backgroundColor: 'transparent' },
+  danger: { backgroundColor: Colors.danger },
   size_sm: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.base },
   size_md: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg },
   size_lg: { paddingVertical: Spacing.base, paddingHorizontal: Spacing.xl },
@@ -70,6 +74,7 @@ const styles = StyleSheet.create({
   text_secondary: { color: Colors.primary },
   text_outline: { color: Colors.primary },
   text_ghost: { color: Colors.primary },
+  text_danger: { color: Colors.white },
   textSize_sm: { fontSize: Typography.size.sm },
   textSize_md: { fontSize: Typography.size.base },
   textSize_lg: { fontSize: Typography.size.md },

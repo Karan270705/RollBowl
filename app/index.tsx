@@ -1,18 +1,29 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { useAuthStore, useIsAuthenticated } from '@/src/store';
+import { useAuthStore, useIsAuthenticated, useAuthStatus } from '@/src/store';
+import { StartupScreen } from '@/src/components/startup';
+import { logStartupStage } from '@/src/utils/startupLogger';
 
 /**
  * Entry point — auth redirect.
- * No UI. Routes to auth flow or main app based on auth state.
+ * Controlled StartupScreen instead of null to prevent blank white screens.
  */
 export default function EntryRedirect() {
   const router = useRouter();
   const isAuthenticated = useIsAuthenticated();
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const authStatus = useAuthStatus();
+  const setAuthError = useAuthStore((s) => s.setAuthError);
+  const setInitializing = useAuthStore((s) => s.setInitializing);
+  const logout = useAuthStore((s) => s.logout);
 
   useEffect(() => {
-    if (isInitializing) return;
+    if (isInitializing || authStatus === 'BOOTING' || authStatus === 'ERROR') return;
+
+    const targetRoute = isAuthenticated ? '/(tabs)/(home)' : '/(auth)/login';
+    logStartupStage('12_ROUTE_DECISION_COMPLETED', {
+      pathname: targetRoute,
+    });
 
     const timer = setTimeout(() => {
       if (isAuthenticated) {
@@ -20,9 +31,31 @@ export default function EntryRedirect() {
       } else {
         router.replace('/(auth)/login' as any);
       }
-    }, 100); // Small delay for navigation readiness
+    }, 10);
     return () => clearTimeout(timer);
-  }, [isAuthenticated, isInitializing]);
+  }, [isAuthenticated, isInitializing, authStatus, router]);
 
-  return null; // No UI — splash screen stays visible
+  const handleRetry = () => {
+    setAuthError(null);
+    setInitializing(true);
+  };
+
+  const handleSignOut = () => {
+    logout();
+    router.replace('/(auth)/login' as any);
+  };
+
+  if (authStatus === 'ERROR') {
+    return (
+      <StartupScreen
+        error={true}
+        onRetry={handleRetry}
+        onSignOut={handleSignOut}
+        showSignOut={true}
+      />
+    );
+  }
+
+  return <StartupScreen />;
 }
+

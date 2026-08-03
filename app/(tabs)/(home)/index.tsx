@@ -7,10 +7,9 @@ import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/ui';
 import { MealCard, CategoryPills } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
-import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory, useOperationalContext } from '@/src/hooks';
+import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGreeting, formatFriendlyDate, formatTimeSlot } from '@/src/utils/formatters';
-import { usePrimaryStallId } from '@/src/hooks/usePrimaryStallId';
 import { resolveCustomerMealAvailability, type InventoryMode } from '@/src/engine/availabilityResolver';
 
 export default function HomeScreen() {
@@ -18,23 +17,26 @@ export default function HomeScreen() {
   const user = useUser();
   const addItem = useCartStore((state) => state.addItem);
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    queryClient.invalidateQueries();
-  }, []);
-
   // ─── Operational Engine ─────────────────────────────────────────
-  const { data: primaryStallId } = usePrimaryStallId();
-  const operationalContext = useOperationalContext(primaryStallId);
-  const { data: opFacts, isLoading: isLoadingOp, isError, error, refetch } = useOperationalWindow();
+  const {
+    data: opFacts,
+    isLoading: isLoadingOp,
+    isError,
+    error,
+    refetch,
+    operationalContext,
+    targetDate,
+    primaryStallId,
+  } = useOperationalWindow();
   
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
 
   // ─── Live Inventory ─────────────────────────────────────────────
   const stallId = primaryStallId || opFacts?.activeMenu?.stall_id;
-  const targetDate = opFacts?.operationalDate || operationalContext.resolvedOperationalDate || operationalContext.preparationDate;
   const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, targetDate);
 
   const { data: allMeals = [] } = useAllMeals();

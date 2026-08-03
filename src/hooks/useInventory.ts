@@ -31,7 +31,7 @@ export function useLiveInventory(
   const queryResult = useQuery({
     queryKey,
     queryFn: async (): Promise<CustomerInventoryItem[]> => {
-      if (!stallId || !date) {
+      if (!stallId || stallId === 'none' || !date) {
         return [];
       }
 
@@ -47,12 +47,12 @@ export function useLiveInventory(
 
       return (data ?? []) as CustomerInventoryItem[];
     },
-    enabled: Boolean(stallId && date),
+    enabled: Boolean(stallId && stallId !== 'none' && date),
     refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
-    if (!stallId || !date) {
+    if (!stallId || stallId === 'none' || !date) {
       return;
     }
 

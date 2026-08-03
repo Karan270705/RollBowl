@@ -35,6 +35,9 @@ export const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   );
 };
 
+export const AppScreen = ScreenWrapper;
+export const ScreenContainer = ScreenWrapper;
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   scroll: { flexGrow: 1 },

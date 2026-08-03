@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii } from '@/src/constants/theme';
 import { Button } from '@/src/components/ui';
@@ -35,6 +35,7 @@ export default function LoginScreen() {
     <ScreenWrapper>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
+          <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} />
           <Text style={styles.logo}><Text style={{ color: '#C41E24' }}>Roll</Text><Text style={{ color: '#F5A623' }}>|</Text><Text style={{ color: '#C41E24' }}>bowl</Text></Text>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue ordering</Text>
@@ -61,7 +62,7 @@ export default function LoginScreen() {
 
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgotRow}>
+          <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgotBtn}>
             <Text style={styles.forgotText}>Forgot Password?</Text>
           </TouchableOpacity>
 
@@ -69,7 +70,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account?</Text>
+          <Text style={styles.footerText}>{"Don't have an account?"}</Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
             <Text style={styles.footerLink}> Sign Up</Text>
           </TouchableOpacity>
@@ -81,13 +82,14 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl },
-  header: { alignItems: 'center', marginBottom: Spacing['3xl'] },
-  logo: { fontSize: 56, marginBottom: Spacing.base },
-  title: { fontSize: Typography.size['2xl'], fontFamily: Typography.family.bold, color: Colors.textPrimary },
+  header: { alignItems: 'center', marginBottom: Spacing['2xl'] },
+  logoImage: { width: 64, height: 64, resizeMode: 'contain', alignSelf: 'center', marginBottom: Spacing.xs },
+  logo: { fontSize: 32, fontFamily: Typography.family.bold, marginBottom: Spacing.sm },
+  title: { fontSize: Typography.size.xl, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   subtitle: { fontSize: Typography.size.base, color: Colors.textSecondary, marginTop: Spacing.xs },
   form: { gap: Spacing.xs },
-  forgotRow: { alignSelf: 'flex-end', marginBottom: Spacing.base },
-  forgotText: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.primary },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: Spacing.md },
+  forgotText: { fontSize: Typography.size.sm, color: Colors.primary, fontFamily: Typography.family.medium },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: Spacing['2xl'] },
   footerText: { fontSize: Typography.size.base, color: Colors.textSecondary },
   footerLink: { fontSize: Typography.size.base, fontFamily: Typography.family.semiBold, color: Colors.primary },

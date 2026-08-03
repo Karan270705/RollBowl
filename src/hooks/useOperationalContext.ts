@@ -41,14 +41,17 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
   const queryClient = useQueryClient();
   const rolloverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const isValidStall = Boolean(stallId && stallId !== 'none');
+
   const { data, refetch } = useQuery({
     queryKey: ['operational-context', stallId],
     queryFn: async () => {
+      if (!isValidStall) return DEFAULT_RESOLVING_CONTEXT;
       return resolveSharedOperationalDate(stallId);
     },
-    enabled: true,
+    enabled: isValidStall,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 2,
+    retry: 1,
   });
 
   const refetchRef = useRef(refetch);
@@ -61,6 +64,8 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
       clearTimeout(rolloverTimerRef.current);
       rolloverTimerRef.current = null;
     }
+
+    if (!isValidStall) return;
 
     const rolloverTimeStr = AppConfig.BUSINESS.OPERATIONAL_ROLLOVER_TIME || '15:00';
     let { delayMs, targetIST } = calculateMsUntilNextRollover(rolloverTimeStr);
@@ -93,17 +98,19 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
       }
       scheduleNextBoundary();
     }, delayMs);
-  }, [stallId, queryClient]);
+  }, [isValidStall, stallId, queryClient]);
 
   useEffect(() => {
-    scheduleNextBoundary();
+    if (isValidStall) {
+      scheduleNextBoundary();
+    }
     return () => {
       if (rolloverTimerRef.current) {
         clearTimeout(rolloverTimerRef.current);
         rolloverTimerRef.current = null;
       }
     };
-  }, [scheduleNextBoundary]);
+  }, [isValidStall, scheduleNextBoundary]);
 
   // Recompute on AppState foreground exactly once per transition
   useEffect(() => {

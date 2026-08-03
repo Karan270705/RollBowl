@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing } from '@/src/constants/theme';
 import { Button, Input } from '@/src/components/ui';
@@ -46,6 +46,7 @@ export default function SignupScreen() {
     <ScreenWrapper>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
+          <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} />
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join RollBowl for campus meals</Text>
         </View>
@@ -75,6 +76,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl },
   header: { alignItems: 'center', marginBottom: Spacing['2xl'] },
+  logoImage: { width: 56, height: 56, resizeMode: 'contain', alignSelf: 'center', marginBottom: Spacing.xs },
   title: { fontSize: Typography.size['2xl'], fontFamily: Typography.family.bold, color: Colors.textPrimary },
   subtitle: { fontSize: Typography.size.base, color: Colors.textSecondary, marginTop: Spacing.xs },
   form: { gap: Spacing.xs },

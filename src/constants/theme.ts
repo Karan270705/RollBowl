@@ -49,6 +49,7 @@ export const Colors = {
   textPrimary: '#1A1A1A',
   textSecondary: '#5F6368',
   textTertiary: '#9AA0A6',
+  textMuted: '#9AA0A6',
   textInverse: '#FFFFFF',
   textLink: '#C41E24',
 
@@ -56,6 +57,9 @@ export const Colors = {
   border: '#E0E0E0',
   borderLight: '#F0EFEB',
   divider: '#EEEDE9',
+  disabled: '#E0E0E0',
+  danger: '#C41E24',
+  primaryPressed: '#9B1B20',
 
   // Overlay
   overlay: 'rgba(0, 0, 0, 0.5)',
@@ -89,6 +93,17 @@ export const Typography = {
     '2xl': 38,
     '3xl': 44,
   },
+  variants: {
+    display: { fontSize: 30, lineHeight: 38, fontFamily: 'Inter_700Bold' },
+    heading1: { fontSize: 24, lineHeight: 32, fontFamily: 'Inter_700Bold' },
+    heading2: { fontSize: 20, lineHeight: 28, fontFamily: 'Inter_600SemiBold' },
+    heading3: { fontSize: 17, lineHeight: 24, fontFamily: 'Inter_600SemiBold' },
+    body: { fontSize: 15, lineHeight: 22, fontFamily: 'Inter_400Regular' },
+    bodyMedium: { fontSize: 15, lineHeight: 22, fontFamily: 'Inter_500Medium' },
+    bodySmall: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter_400Regular' },
+    caption: { fontSize: 11, lineHeight: 16, fontFamily: 'Inter_400Regular' },
+    button: { fontSize: 15, lineHeight: 22, fontFamily: 'Inter_600SemiBold' },
+  },
 } as const;
 
 export const Spacing = {
@@ -102,6 +117,15 @@ export const Spacing = {
   '3xl': 40,
   '4xl': 48,
   '5xl': 64,
+  4: 4,
+  8: 8,
+  12: 12,
+  16: 16,
+  20: 20,
+  24: 24,
+  32: 32,
+  40: 40,
+  48: 48,
 } as const;
 
 export const Radii = {
@@ -112,6 +136,11 @@ export const Radii = {
   xl: 20,
   '2xl': 24,
   full: 9999,
+  small: 4,
+  medium: 8,
+  large: 12,
+  extraLarge: 20,
+  pill: 9999,
 } as const;
 
 export const Shadows = {
@@ -136,6 +165,26 @@ export const Shadows = {
     shadowRadius: 16,
     elevation: 6,
   },
+  subtleCard: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  floatingElement: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modal: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20, elevation: 8,
+  },
 } as const;
 
 export const IconSizes = {
@@ -146,5 +195,13 @@ export const IconSizes = {
   xl: 36,
 } as const;
 
-const theme = { Colors, Typography, Spacing, Radii, Shadows, IconSizes };
+export const Motion = {
+  fast: 150,
+  normal: 250,
+  slow: 400,
+  standardEasing: 'ease-in-out',
+  emphasizedEasing: 'cubic-bezier(0.2, 0.0, 0, 1.0)',
+} as const;
+
+const theme = { Colors, Typography, Spacing, Radii, Shadows, IconSizes, Motion };
 export default theme;
