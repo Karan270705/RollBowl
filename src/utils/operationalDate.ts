@@ -12,10 +12,24 @@ export async function getPrimaryStallId(): Promise<string> {
   return data.id;
 }
 
-// Helper to get today's date string in IST without toLocaleString
+// Helper to get today's date string in IST safely across all JS engines (e.g. Hermes)
 export function getTodayISTDateString(): string {
-  const istDate = new Date(Date.now() + 19800000); // UTC+05:30 offset in ms
-  return istDate.toISOString().split('T')[0];
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  if (!year || !month || !day) {
+    throw new Error('Unable to resolve current IST date');
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 // Helper to get tomorrow's date string in IST without toLocaleString

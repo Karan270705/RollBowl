@@ -2,13 +2,21 @@ import { supabase } from '@/src/lib/supabase';
 import { Subscription, SubscriptionPlan } from '@/src/types/models';
 import { NotificationEvents } from '@/src/services/notifications';
 
+import { getTodayISTDateString } from '@/src/utils/operationalDate';
+import { isSubscriptionRecordActive } from '@/src/utils/subscriptionEngine';
+
 export async function getActiveSubscription(userId: string): Promise<Subscription | null> {
+  const currentISTDate = getTodayISTDateString();
   const { data, error } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'active')
-    .single();
+    .lte('start_date', currentISTDate)
+    .gte('end_date', currentISTDate)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     if (error.code === 'PGRST116') return null; // No rows found
@@ -31,23 +39,26 @@ export async function getActiveSubscription(userId: string): Promise<Subscriptio
     dailyCreditsUsed: data.daily_credits_used,
   } as Subscription;
 
+  // Defensive second validation
+  if (!isSubscriptionRecordActive(sub, currentISTDate)) {
+    return null;
+  }
+
   // --- Lazy Notification Evaluation for Expiry ---
   const today = new Date();
   const endDate = new Date(sub.endDate);
   const diffTime = endDate.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  if (sub.status === 'active') {
-    if (diffDays <= 0) {
-      // It's expired today or in the past, but status hasn't been updated yet?
-      // Or maybe it just expired. Let's notify.
-      await NotificationEvents.notifySubscriptionExpired(sub.userId, sub.id).catch(console.error);
-      
-      // Optionally update DB status here or rely on cron/user action
-      // await supabase.from('subscriptions').update({ status: 'expired' }).eq('id', sub.id);
-    } else if (diffDays <= 3) {
-      await NotificationEvents.notifySubscriptionExpiring(sub.userId, diffDays, sub.id).catch(console.error);
-    }
+  if (diffDays <= 0) {
+    // It's expired today or in the past, but status hasn't been updated yet?
+    // Or maybe it just expired. Let's notify.
+    await NotificationEvents.notifySubscriptionExpired(sub.userId, sub.id).catch(console.error);
+    
+    // Optionally update DB status here or rely on cron/user action
+    // await supabase.from('subscriptions').update({ status: 'expired' }).eq('id', sub.id);
+  } else if (diffDays <= 3) {
+    await NotificationEvents.notifySubscriptionExpiring(sub.userId, diffDays, sub.id).catch(console.error);
   }
 
   return sub;

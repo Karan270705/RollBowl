@@ -12,6 +12,8 @@ import { formatCurrency, formatFriendlyDate, formatRelativeTime } from '@/src/ut
 import { PaymentStatusBadge } from '@/src/components/payments/PaymentStatusBadge';
 import { CustomerPaymentProofModal } from '@/src/components/payments/CustomerPaymentProofModal';
 import { SubscriptionRequestStatus } from '@/src/constants/enums';
+import { getTodayISTDateString } from '@/src/utils/operationalDate';
+import { isSubscriptionRecordActive } from '@/src/utils/subscriptionEngine';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
@@ -21,7 +23,9 @@ export default function SubscriptionScreen() {
   const { data: history = [], isLoading: isLoadingHistory } = useSubscriptionUsageHistory(subscription?.id);
   const { data: requests = [], isLoading: isLoadingRequests } = useSubscriptionRequests(user?.id);
   const { targetDate: resolvedServiceDate } = useOperationalWindow();
-  const currentServiceDate = resolvedServiceDate || new Date().toISOString().split('T')[0];
+  const currentServiceDate = resolvedServiceDate || getTodayISTDateString();
+  const calendarDate = getTodayISTDateString();
+  const isSubscriptionActive = isSubscriptionRecordActive(subscription || null, calendarDate);
 
   const storedDailyCreditsUsed = subscription?.dailyCreditsUsed || 0;
   const effectiveDailyCreditsUsed =
@@ -34,6 +38,18 @@ export default function SubscriptionScreen() {
 
   useEffect(() => {
     if (__DEV__ && subscription) {
+      console.log('[SUBSCRIPTION VALIDITY CHECK]', {
+        subscriptionId: subscription.id,
+        storedStatus: subscription.status,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+        currentISTDate: calendarDate,
+        resolvedServiceDate: currentServiceDate,
+        activeForDashboard: isSubscriptionActive,
+        validForServiceDate: subscription.status === 'active' && subscription.startDate <= currentServiceDate && subscription.endDate >= currentServiceDate,
+        expiryReason: !isSubscriptionActive ? 'END_DATE_PASSED' : null,
+      });
+
       console.log('[SUBSCRIPTION DAILY CREDIT DISPLAY]', {
         subscriptionId: subscription.id,
         resolvedServiceDate: currentServiceDate,
@@ -46,7 +62,7 @@ export default function SubscriptionScreen() {
         remainingMeals: subscription.remainingMeals,
       });
     }
-  }, [subscription, currentServiceDate, storedDailyCreditsUsed, effectiveDailyCreditsUsed, leftToday]);
+  }, [subscription, currentServiceDate, calendarDate, isSubscriptionActive, storedDailyCreditsUsed, effectiveDailyCreditsUsed, leftToday]);
 
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isProofModalVisible, setIsProofModalVisible] = useState(false);
@@ -64,7 +80,7 @@ export default function SubscriptionScreen() {
     if (
       request.status === SubscriptionRequestStatus.REJECTED &&
       subscription &&
-      subscription.status === 'active'
+      isSubscriptionActive
     ) {
       return false;
     }
@@ -181,25 +197,25 @@ export default function SubscriptionScreen() {
         )}
 
         {/* Active Dashboard */}
-        {subscription ? (
+        {(subscription && isSubscriptionActive) ? (
           <View style={styles.dashboardCard}>
             <View style={styles.planHeader}>
               <View>
                 <Text style={styles.planName}>{subscription.planName}</Text>
-                <View style={[styles.statusBadge, subscription.status !== 'active' && styles.statusBadgeInactive]}>
-                  <Text style={styles.statusText}>{subscription.status.toUpperCase()}</Text>
+                <View style={[styles.statusBadge, !isSubscriptionActive && styles.statusBadgeInactive]}>
+                  <Text style={styles.statusText}>{isSubscriptionActive ? 'ACTIVE' : subscription.status.toUpperCase()}</Text>
                 </View>
               </View>
-              <Ionicons name="ticket" size={40} color={subscription.status === 'active' ? Colors.primary : Colors.textTertiary} />
+              <Ionicons name="ticket" size={40} color={isSubscriptionActive ? Colors.primary : Colors.textTertiary} />
             </View>
 
-            {subscription.status !== 'active' && (
+            {!isSubscriptionActive && (
               <View style={styles.expiryMessage}>
                 <Ionicons name="warning" size={20} color={Colors.warningDark} />
                 <Text style={styles.expiryText}>
                   {subscription.status === 'expired' ? 'Your subscription has expired. Renew to continue enjoying items.' : 
                    subscription.status === 'paused' ? 'Your subscription is currently paused.' : 
-                   'Your subscription has been cancelled.'}
+                   'Your subscription has been cancelled or expired.'}
                 </Text>
               </View>
             )}
@@ -210,7 +226,7 @@ export default function SubscriptionScreen() {
                 <Text style={styles.progressValue}>{subscription.consumedMeals} / {subscription.totalMeals}</Text>
               </View>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${Math.min(100, (subscription.consumedMeals / subscription.totalMeals) * 100)}%`, backgroundColor: subscription.status === 'active' ? Colors.primary : Colors.textTertiary }]} />
+                <View style={[styles.progressBarFill, { width: `${Math.min(100, (subscription.consumedMeals / subscription.totalMeals) * 100)}%`, backgroundColor: isSubscriptionActive ? Colors.primary : Colors.textTertiary }]} />
               </View>
             </View>
 

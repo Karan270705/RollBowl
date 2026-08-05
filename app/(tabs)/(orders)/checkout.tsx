@@ -21,7 +21,7 @@ import { queryKeys } from "@/src/hooks/queryKeys";
 import { placeOrder } from "@/src/services/orders";
 import { useCartStore, useUser } from "@/src/store";
 import { formatCurrency, formatFriendlyDate } from "@/src/utils/formatters";
-import { processSubscription } from "@/src/utils/subscriptionEngine";
+import { processSubscription, isSubscriptionValidForServiceDate } from "@/src/utils/subscriptionEngine";
 import { Ionicons } from "@expo/vector-icons";
 import type { InventoryMode } from "@/src/engine/availabilityResolver";
 import { useQueryClient } from "@tanstack/react-query";
@@ -175,7 +175,10 @@ export default function CheckoutScreen() {
   const remainingPayableAmount = Math.round(displayTotal * 100) / 100;
 
   const isSubscriptionApplied = engineResult.subscriptionUpdates !== null;
-  const isSubActiveAndApplied = Boolean(isSubscriptionApplied && subscription && subscription.status === 'active');
+  const isSubActiveAndApplied = Boolean(
+    isSubscriptionApplied &&
+    isSubscriptionValidForServiceDate(subscription || null, opFacts?.operationalDate || '')
+  );
   const subscriptionCoveredAmount = isSubActiveAndApplied
     ? Math.round(Math.max(0, grossOrderAmount - remainingPayableAmount) * 100) / 100
     : 0;

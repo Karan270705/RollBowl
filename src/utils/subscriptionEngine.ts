@@ -134,3 +134,29 @@ export function processSubscription(
 
   return { processedItems, subscriptionUpdates, newSubtotal };
 }
+
+// A. Dashboard / lifecycle helper
+export function isSubscriptionRecordActive(
+  subscription: Subscription | null,
+  currentISTDate: string
+): boolean {
+  if (!subscription) return false;
+  return (
+    subscription.status === 'active' &&
+    subscription.startDate <= currentISTDate &&
+    subscription.endDate >= currentISTDate
+  );
+}
+
+// B. Ordering helper
+export function isSubscriptionValidForServiceDate(
+  subscription: Subscription | null,
+  serviceDate: string
+): boolean {
+  if (!subscription) return false;
+  return (
+    subscription.status === 'active' &&
+    subscription.startDate <= serviceDate &&
+    subscription.endDate >= serviceDate
+  );
+}
