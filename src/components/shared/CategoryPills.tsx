@@ -5,7 +5,7 @@ import { MealCategory } from '@/src/constants/enums';
 
 const CATEGORIES = [
   { key: 'all' as const, label: 'All', icon: '🍽️' },
-  { key: MealCategory.ROLL, label: 'Rolls', icon: '🌯' },
+  { key: MealCategory.ROLL, label: 'Roll', icon: '🌯' },
   { key: MealCategory.BOWL, label: 'Bowl', icon: '🥣' },
   { key: MealCategory.COMBO, label: 'Combos', icon: '🎁' },
 ];

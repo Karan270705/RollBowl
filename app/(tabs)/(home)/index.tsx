@@ -112,7 +112,7 @@ export default function HomeScreen() {
   // ─── Browse Catalog ───────────────────────────────────────
 
   const filteredCatalog = useMemo(() => {
-    return allMeals.filter((m) => {
+    const baseFiltered = allMeals.filter((m) => {
       const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
       const matchesSearch =
         search.trim() === '' ||
@@ -120,7 +120,21 @@ export default function HomeScreen() {
         m.description.toLowerCase().includes(search.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [allMeals, selectedCategory, search]);
+
+    const scheduledMealIds = new Set(availableMeals.map(m => m.id));
+
+    return [...baseFiltered].sort((a, b) => {
+      const isAvailableA = a.isAvailable === true && scheduledMealIds.has(a.id);
+      const isAvailableB = b.isAvailable === true && scheduledMealIds.has(b.id);
+      
+      if (isAvailableA !== isAvailableB) {
+        return isAvailableA ? -1 : 1;
+      }
+      
+      // Preserve existing meaningful order (stable sort)
+      return 0;
+    });
+  }, [allMeals, selectedCategory, search, availableMeals]);
 
   // ─── Loading ─────────────────────────────────────────────
   if (isLoading) {
