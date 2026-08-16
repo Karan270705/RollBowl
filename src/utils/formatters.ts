@@ -101,3 +101,21 @@ export function formatTimeSlot(timeString: string | null | undefined): string {
   return timeString;
 }
 
+export function formatScheduleWindow(startStr: string, endStr: string): string {
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
+
+  const startDay = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const endDay = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  
+  const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  if (startDay === endDay) {
+    return `${startDay}, ${startTime} - ${endTime}`;
+  }
+  return `${startDay}, ${startTime} - ${endDay}, ${endTime}`;
+}
+

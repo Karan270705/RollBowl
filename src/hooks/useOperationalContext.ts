@@ -11,32 +11,6 @@ import {
 } from '../utils/operationalDate';
 import { AppConfig } from '../constants/config';
 
-// Calculate milliseconds until next rollover time (default 15:00 IST) using explicit epoch math
-function calculateMsUntilNextRollover(rolloverTimeStr = '15:00'): { delayMs: number; targetIST: string } {
-  const nowMs = Date.now();
-  const todayStr = getTodayISTDateString();
-  const todayRolloverDate = parseTimeToDateIST(todayStr, rolloverTimeStr);
-  const todayRolloverMs = todayRolloverDate.getTime();
-
-  let targetMs: number;
-  let targetDate: Date;
-
-  if (nowMs < todayRolloverMs) {
-    targetMs = todayRolloverMs;
-    targetDate = todayRolloverDate;
-  } else {
-    const tomorrowStr = getTomorrowISTDateString(todayStr);
-    const tomorrowRolloverDate = parseTimeToDateIST(tomorrowStr, rolloverTimeStr);
-    targetMs = tomorrowRolloverDate.getTime();
-    targetDate = tomorrowRolloverDate;
-  }
-
-  return {
-    delayMs: targetMs - nowMs,
-    targetIST: targetDate.toISOString(),
-  };
-}
-
 export function useOperationalContext(stallId?: string): OperationalContextResult & { stallId?: string; refetch: () => void } {
   const queryClient = useQueryClient();
   const rolloverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,19 +39,20 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
       rolloverTimerRef.current = null;
     }
 
-    if (!isValidStall) return;
+    if (!isValidStall || !data) return;
 
-    const rolloverTimeStr = AppConfig.BUSINESS.OPERATIONAL_ROLLOVER_TIME || '15:00';
-    let { delayMs, targetIST } = calculateMsUntilNextRollover(rolloverTimeStr);
+    let delayMs = 1000 * 60 * 5; // Default 5 minute retry if no explicit boundary
+    let targetIST = 'unknown';
+
+    if (data.activeMenuDeliveryEndMs) {
+      delayMs = data.activeMenuDeliveryEndMs - Date.now();
+      targetIST = new Date(data.activeMenuDeliveryEndMs).toISOString();
+    }
 
     // Minimum safety guard
     if (!Number.isFinite(delayMs) || delayMs < 1000) {
-      console.warn('[ROLLOVER TIMER SAFETY GUARD] delayMs < 1000, forcing tomorrow boundary', { delayMs });
-      const todayStr = getTodayISTDateString();
-      const tomorrowStr = getTomorrowISTDateString(todayStr);
-      const tomorrowRolloverDate = parseTimeToDateIST(tomorrowStr, rolloverTimeStr);
-      delayMs = Math.max(1000, tomorrowRolloverDate.getTime() - Date.now());
-      targetIST = tomorrowRolloverDate.toISOString();
+      console.warn('[ROLLOVER TIMER SAFETY GUARD] delayMs < 1000, forcing 5 minute retry boundary', { delayMs });
+      delayMs = 1000 * 60 * 5;
     }
 
     console.log('[ROLLOVER TIMER SCHEDULE]', JSON.stringify({
@@ -96,9 +71,9 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
         queryClient.invalidateQueries({ queryKey: ['dashboard_summary', stallId] });
         queryClient.invalidateQueries({ queryKey: ['orders', 'list', stallId] });
       }
-      scheduleNextBoundary();
+      // Re-schedule will happen inside useEffect when `data` updates
     }, delayMs);
-  }, [isValidStall, stallId, queryClient]);
+  }, [isValidStall, stallId, queryClient, data]);
 
   useEffect(() => {
     if (isValidStall) {
@@ -110,7 +85,7 @@ export function useOperationalContext(stallId?: string): OperationalContextResul
         rolloverTimerRef.current = null;
       }
     };
-  }, [isValidStall, scheduleNextBoundary]);
+  }, [isValidStall, scheduleNextBoundary, data]);
 
   // Recompute on AppState foreground exactly once per transition
   useEffect(() => {

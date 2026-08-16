@@ -17,6 +17,10 @@ export interface OperationalFacts {
   pickupWindowOpen: boolean;
   isPrepTime: boolean;
   orderCutoff: string;
+  orderingStart?: string;
+  orderingEnd?: string;
+  deliveryStart?: string;
+  deliveryEnd?: string;
 }
 
 /**
@@ -99,47 +103,34 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
     };
   }
 
-  // 3. Timing Checks using epoch milliseconds in IST
-  const orderCutoffDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.ORDER_CUTOFF_TIME);
-  const pickupStartDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.PICKUP_START_TIME);
-  const pickupEndDate = setTimeOnDateIST(operationalDate, AppConfig.BUSINESS.PICKUP_END_TIME);
-
+  // 3. Timing Checks using explicit DB timestamps
   const nowMs = Date.now();
-  const visibleFromMs = (menuData as any).visible_from ? new Date((menuData as any).visible_from).getTime() : 0;
-
-  if (Number.isFinite(visibleFromMs) && nowMs < visibleFromMs) {
-    return {
-      operationalDate,
-      status: 'MENU_SCHEDULED',
-      isHoliday: false,
-      holidayDetails: null,
-      hasPublishedMenu: false,
-      activeMenu: menuData as MenuSchedule,
-      canPlaceOrders: false,
-      pickupWindowOpen: false,
-      isPrepTime: false,
-      orderCutoff: (menuData as any).order_cutoff || '',
-    };
-  }
-
-  const orderCutoffMs = orderCutoffDate.getTime();
-  const pickupStartMs = pickupStartDate.getTime();
-  const pickupEndMs = pickupEndDate.getTime();
-
-  const isBeforeOrAtCutoff = Number.isFinite(orderCutoffMs) && nowMs <= orderCutoffMs;
-  const isPrepTime = Number.isFinite(orderCutoffMs) && Number.isFinite(pickupStartMs) && nowMs > orderCutoffMs && nowMs < pickupStartMs;
-  const pickupWindowOpen = Number.isFinite(pickupStartMs) && Number.isFinite(pickupEndMs) && nowMs >= pickupStartMs && nowMs <= pickupEndMs;
+  
+  const menu = menuData as MenuSchedule;
+  const visibleFromMs = new Date(menu.visible_from).getTime();
+  const orderCutoffMs = new Date(menu.order_cutoff).getTime();
+  const deliveryStartMs = new Date(menu.delivery_start_at).getTime();
+  const deliveryEndMs = new Date(menu.delivery_end_at).getTime();
 
   let status: OperationalStatus = 'ORDERING_CLOSED';
-  if (isBeforeOrAtCutoff) {
+  
+  if (nowMs < visibleFromMs) {
+    status = 'MENU_SCHEDULED';
+  } else if (nowMs >= visibleFromMs && nowMs <= orderCutoffMs) {
     status = 'ORDERING_OPEN';
-  } else if (pickupWindowOpen) {
+  } else if (nowMs >= deliveryStartMs && nowMs <= deliveryEndMs) {
     status = 'PICKUP_ACTIVE';
+  } else {
+    // If it's between order_cutoff and delivery_start_at, or after delivery_end_at
+    status = 'ORDERING_CLOSED';
   }
 
-  const canPlaceOrders = isBeforeOrAtCutoff;
+  const isBeforeOrAtCutoff = nowMs <= orderCutoffMs;
+  const canPlaceOrders = status === 'ORDERING_OPEN';
+  const pickupWindowOpen = status === 'PICKUP_ACTIVE';
+  const isPrepTime = nowMs > orderCutoffMs && nowMs < deliveryStartMs;
 
-  if (!isBeforeOrAtCutoff && status !== 'ORDERING_OPEN') {
+  if (status !== 'ORDERING_OPEN') {
     console.log('[ORDER STATUS INFO] After cutoff or closed', {
       now: new Date(nowMs).toISOString(),
       cutoff: new Date(orderCutoffMs).toISOString(),
@@ -161,10 +152,14 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
     isHoliday: false,
     holidayDetails: null,
     hasPublishedMenu: true,
-    activeMenu: menuData as MenuSchedule,
+    activeMenu: menu,
     canPlaceOrders,
     pickupWindowOpen,
     isPrepTime,
-    orderCutoff: orderCutoffDate.toISOString(),
+    orderCutoff: menu.order_cutoff,
+    orderingStart: menu.visible_from,
+    orderingEnd: menu.order_cutoff,
+    deliveryStart: menu.delivery_start_at,
+    deliveryEnd: menu.delivery_end_at,
   };
 }

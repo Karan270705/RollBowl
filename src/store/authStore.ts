@@ -21,6 +21,8 @@ interface AuthState {
   logout: () => void;
   setLoading: (loading: boolean) => void;
   updateUser: (updates: Partial<User>) => void;
+  retryCount: number;
+  retryInitialization: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -32,6 +34,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   isInitializing: true,
   authStatus: 'BOOTING',
   authError: null,
+  retryCount: 0,
+  retryInitialization: () => set((state) => ({
+    retryCount: state.retryCount + 1,
+    authStatus: 'BOOTING',
+    authError: null,
+    isInitializing: true,
+  })),
   setSession: (session, user) => {
     console.log('ZUSTAND setSession', session?.user?.id || 'null', user?.id || 'null');
     logStartupStage('07_ZUSTAND_SESSION_SYNCHRONIZED', {

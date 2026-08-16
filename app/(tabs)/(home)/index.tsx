@@ -5,11 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
 import { SearchBar, LoadingSpinner, EmptyState, Button } from '@/src/components/ui';
-import { MealCard, CategoryPills } from '@/src/components/shared';
+import { MealCard, CategoryPills, StickyCartBar } from '@/src/components/shared';
 import { useUser, useCartStore } from '@/src/store';
 import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory } from '@/src/hooks';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGreeting, formatFriendlyDate, formatTimeSlot } from '@/src/utils/formatters';
+import { getGreeting, formatFriendlyDate, formatTime, formatScheduleWindow } from '@/src/utils/formatters';
 import { resolveCustomerMealAvailability, type InventoryMode } from '@/src/engine/availabilityResolver';
 
 export default function HomeScreen() {
@@ -188,7 +188,7 @@ export default function HomeScreen() {
         <EmptyState
           icon="time-outline"
           title="Menu Scheduled"
-          subtitle="Menu will be available at 4:00 PM"
+          subtitle={opFacts.orderingStart ? `Menu will be available at ${formatTime(opFacts.orderingStart)}` : "Menu will be available later"}
         />
       </ScreenWrapper>
     );
@@ -291,17 +291,17 @@ export default function HomeScreen() {
 
   if (canOrder) {
     statusTitle = `Menu Available`;
-    statusSubtitle = `Place your order before the cutoff.`;
+    statusSubtitle = opFacts?.orderingEnd ? `Ordering closes at ${formatTime(opFacts.orderingEnd)}` : `Place your order before the cutoff.`;
     statusColor = Colors.success;
     statusIcon = 'checkmark-circle';
   } else if (opFacts.status === 'ORDERING_CLOSED' || opFacts.isPrepTime) {
     statusTitle = 'Orders Closed';
-    statusSubtitle = 'We are preparing the meals. Pickup starts soon.';
+    statusSubtitle = opFacts?.deliveryStart ? `Pickup starts at ${formatTime(opFacts.deliveryStart)}` : 'The kitchen is getting ready for service. Pickup starts soon.';
     statusColor = Colors.warning;
     statusIcon = 'restaurant-outline';
   } else if (opFacts.status === 'PICKUP_ACTIVE') {
     statusTitle = 'Pickup Window Active';
-    statusSubtitle = 'Head to the stall to collect your order.';
+    statusSubtitle = (opFacts?.deliveryStart && opFacts?.deliveryEnd) ? `Pickup window: ${formatTime(opFacts.deliveryStart)} - ${formatTime(opFacts.deliveryEnd)}` : 'Head to the stall to collect your order.';
     statusColor = Colors.primary;
     statusIcon = 'basket-outline';
   } else {
@@ -457,8 +457,9 @@ export default function HomeScreen() {
         initialNumToRender={6}
         maxToRenderPerBatch={6}
         windowSize={5}
-        contentContainerStyle={{ paddingBottom: Spacing.xl }}
+        contentContainerStyle={{ paddingBottom: Spacing['3xl'] }}
       />
+      <StickyCartBar />
     </ScreenWrapper>
   );
 }

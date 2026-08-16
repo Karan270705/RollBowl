@@ -150,7 +150,7 @@ export default function CheckoutScreen() {
         menuDate: opFacts.activeMenu?.menu_date || null,
         inventoryDate: activeBatch?.inventory_date || null,
         cartPickupDate,
-        rolloverTime: AppConfig.BUSINESS.OPERATIONAL_ROLLOVER_TIME,
+        rolloverTime: "dynamic",
         resolutionReason: 'Resolved by Customer Engine',
       }, null, 2));
     }
@@ -554,12 +554,35 @@ export default function CheckoutScreen() {
                 <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
                   <Text style={styles.cardTitle}>Expected Pickup Time</Text>
                   <View style={styles.chipContainer}>
-                    {[
-                      { label: "12:00–12:30", value: "12:00 PM - 12:30 PM" },
-                      { label: "12:30–1:00", value: "12:30 PM - 01:00 PM" },
-                      { label: "1:00–1:30", value: "01:00 PM - 01:30 PM" },
-                      { label: "1:30–2:00", value: "01:30 PM - 02:00 PM" },
-                    ].map((slot) => (
+                    {(() => {
+                      const menuInfo = opFacts?.activeMenu as any;
+                      if (!menuInfo || !menuInfo.delivery_start_at || !menuInfo.delivery_end_at) {
+                        return [
+                          { label: "12:00–12:30", value: "12:00 PM - 12:30 PM" },
+                          { label: "12:30–1:00", value: "12:30 PM - 01:00 PM" },
+                          { label: "1:00–1:30", value: "01:00 PM - 01:30 PM" },
+                          { label: "1:30–2:00", value: "01:30 PM - 02:00 PM" },
+                        ];
+                      }
+                      
+                      const slots = [];
+                      let currentMs = new Date(menuInfo.delivery_start_at).getTime();
+                      const endMs = new Date(menuInfo.delivery_end_at).getTime();
+                      
+                      const formatTimeOnly = (ms: number) => {
+                        return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                      };
+                      
+                      while (currentMs < endMs) {
+                        const nextMs = Math.min(currentMs + 30 * 60000, endMs);
+                        const label = `${formatTimeOnly(currentMs).replace(' AM', '').replace(' PM', '')}–${formatTimeOnly(nextMs).replace(' AM', '').replace(' PM', '')}`;
+                        const value = `${formatTimeOnly(currentMs)} - ${formatTimeOnly(nextMs)}`;
+                        slots.push({ label, value });
+                        currentMs = nextMs;
+                      }
+                      
+                      return slots.length > 0 ? slots : [{ label: "During Window", value: "During Window" }];
+                    })().map((slot) => (
                       <TouchableOpacity
                         key={slot.value}
                         style={[styles.chip, pickupSlot === slot.value && styles.chipActive]}

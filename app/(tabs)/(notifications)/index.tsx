@@ -53,7 +53,6 @@ export default function NotificationsScreen() {
   const getNotificationTitle = (n: Notification) => {
     if (n.title) return n.title;
     switch (n.data?.event) {
-      case 'ORDER_PREPARING': return 'Order Preparing';
       case 'ORDER_READY': return 'Order Ready for Pickup';
       case 'ORDER_COLLECTED': return 'Order Collected';
       case 'ORDER_CANCELLED': return 'Order Cancelled';
@@ -65,7 +64,6 @@ export default function NotificationsScreen() {
     if (n.body) return n.body;
     const orderNum = n.data?.orderNumber || 'your order';
     switch (n.data?.event) {
-      case 'ORDER_PREPARING': return `Your item for order ${orderNum} is currently being prepared.`;
       case 'ORDER_READY': return `Your order ${orderNum} is ready for pickup!`;
       case 'ORDER_COLLECTED': return `Order ${orderNum} has been successfully collected. Enjoy your meal!`;
       case 'ORDER_CANCELLED': return `Your order ${orderNum} has been cancelled.`;

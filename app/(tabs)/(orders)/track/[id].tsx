@@ -33,19 +33,17 @@ export default function TrackOrderScreen() {
   const getSteps = (status: OrderStatus): TimelineStep[] => {
     const isPending = status === OrderStatus.PENDING;
     const isConfirmed = status === OrderStatus.CONFIRMED;
-    const isPreparing = status === OrderStatus.PREPARING;
     const isReady = status === OrderStatus.READY;
     const isPickedUp = status === OrderStatus.PICKED_UP;
 
     // Determine active steps based on standard progression
     const pendingActive = isPending;
     const confirmedActive = isConfirmed;
-    const preparingActive = isPreparing;
     const readyActive = isReady;
 
     // Determine completed steps
-    const confirmedCompleted = isConfirmed || isPreparing || isReady || isPickedUp;
-    const preparingCompleted = isPreparing || isReady || isPickedUp;
+    // Progress directly from Confirmed -> Ready
+    const confirmedCompleted = isConfirmed || isReady || isPickedUp;
     const readyCompleted = isReady || isPickedUp;
     const pickedUpCompleted = isPickedUp;
 
@@ -66,14 +64,6 @@ export default function TrackOrderScreen() {
         isCompleted: confirmedCompleted,
         isActive: confirmedActive,
         icon: 'restaurant',
-      },
-      {
-        id: '3',
-        title: 'Preparing',
-        description: 'Your food is being prepared with care.',
-        isCompleted: preparingCompleted,
-        isActive: preparingActive,
-        icon: 'flame',
       },
       {
         id: '4',

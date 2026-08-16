@@ -8,7 +8,10 @@ export interface MenuSchedule {
   menu_date: string;
   visible_from: string;
   order_cutoff: string;
+  delivery_start_at: string;
+  delivery_end_at: string;
   is_published: boolean;
+  stall_name?: string;
 }
 
 /**

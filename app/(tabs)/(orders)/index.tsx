@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
 import { ScreenWrapper, Section } from '@/src/components/layout';
@@ -17,38 +17,42 @@ export default function OrdersScreen() {
   const user = useUser();
   const { data: orders = [], isLoading, isError } = useUserOrders(user?.id);
 
-  // Group orders
-  const { activeOrders, recentOrders } = useMemo(() => {
-    const active: Order[] = [];
-    const recent: Order[] = [];
+  // Deterministic Sorting & Grouping
+  const groupedOrders = useMemo(() => {
+    // 1. Sort newest to oldest
+    const sorted = [...orders].sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+      return b.id.localeCompare(a.id); // Deterministic secondary sort
+    });
 
-    const activeStatuses = [
-      OrderStatus.PENDING,
-      OrderStatus.CONFIRMED,
-      OrderStatus.PREPARING,
-      OrderStatus.READY,
-    ];
-
-    const recentStatuses = [
-      OrderStatus.PICKED_UP,
-      OrderStatus.CANCELLED,
-    ];
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    orders.forEach((order) => {
-      if (activeStatuses.includes(order.status)) {
-        active.push(order);
-      } else if (recentStatuses.includes(order.status)) {
-        const orderDate = new Date(order.createdAt);
-        if (orderDate >= sevenDaysAgo) {
-          recent.push(order);
+    // 2. Group by local calendar date
+    const groups: { title: string; data: Order[] }[] = [];
+    sorted.forEach((order) => {
+      let title = 'UNKNOWN DATE';
+      if (order.createdAt) {
+        const dateObj = new Date(order.createdAt);
+        if (!isNaN(dateObj.getTime())) {
+          const datePart = dateObj.toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'long', year: 'numeric',
+          }).toUpperCase();
+          const dayPart = dateObj.toLocaleDateString('en-GB', {
+            weekday: 'long'
+          }).toUpperCase();
+          title = `${datePart} · ${dayPart}`;
         }
+      }
+
+      let lastGroup = groups[groups.length - 1];
+      if (!lastGroup || lastGroup.title !== title) {
+        groups.push({ title, data: [order] });
+      } else {
+        lastGroup.data.push(order);
       }
     });
 
-    return { activeOrders: active, recentOrders: recent };
+    return groups;
   }, [orders]);
 
   if (isLoading) {
@@ -73,7 +77,7 @@ export default function OrdersScreen() {
     );
   }
 
-  const hasNoOrders = activeOrders.length === 0 && recentOrders.length === 0;
+  const hasNoOrders = groupedOrders.length === 0;
 
   const renderOrderCard = (order: Order) => (
     <TouchableOpacity 
@@ -115,19 +119,21 @@ export default function OrdersScreen() {
           subtitle="Your placed orders will appear here." 
         />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          {activeOrders.length > 0 && (
-            <Section title="Active Orders">
-              {activeOrders.map(renderOrderCard)}
-            </Section>
+        <SectionList
+          sections={groupedOrders}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => renderOrderCard(item)}
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={styles.sectionHeaderContainer}>
+              <Text style={styles.sectionHeaderText}>{title}</Text>
+              <View style={styles.sectionHeaderDivider} />
+            </View>
           )}
-
-          {recentOrders.length > 0 && (
-            <Section title="Recent Orders">
-              {recentOrders.map(renderOrderCard)}
-            </Section>
-          )}
-        </ScrollView>
+          renderSectionFooter={() => <View style={styles.sectionFooterDivider} />}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+        />
       )}
       <StickyCartBar />
     </ScreenWrapper>
@@ -144,6 +150,27 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: Typography.size.xl, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   scrollContent: { paddingBottom: Spacing['3xl'] },
+  sectionHeaderContainer: {
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
+  },
+  sectionHeaderText: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
+  },
+  sectionHeaderDivider: {
+    height: 2,
+    backgroundColor: Colors.border,
+  },
+  sectionFooterDivider: {
+    height: 2,
+    backgroundColor: Colors.border,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   orderCard: {
     backgroundColor: Colors.surface, borderRadius: Radii.lg,
     padding: Spacing.base, marginBottom: Spacing.md, ...Shadows.sm,

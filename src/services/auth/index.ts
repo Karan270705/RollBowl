@@ -51,11 +51,17 @@ export const resetPassword = async (email: string) => {
 
 
 export const fetchUserProfile = async (userId: string): Promise<User | null> => {
-  const { data, error } = await supabase
+  const fetchPromise = supabase
     .from('users')
     .select('*')
     .eq('id', userId)
     .maybeSingle();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('User profile request timed out after 8 seconds.')), 8000);
+  });
+
+  const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
   if (error) throw error;
   if (!data) return null;

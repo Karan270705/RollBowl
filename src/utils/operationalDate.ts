@@ -63,6 +63,7 @@ export interface OperationalContextResult {
   calendarDate: string;
   resolvedOperationalDate: string | null;
   preparationDate: string;
+  activeMenuDeliveryEndMs?: number;
   reason: string;
   resolutionReason: string;
   isResolving: boolean;
@@ -81,94 +82,82 @@ export const DEFAULT_RESOLVING_CONTEXT: OperationalContextResult = {
 export async function resolveSharedOperationalDate(stallId?: string): Promise<OperationalContextResult> {
   const calendarDate = getTodayISTDateString();
   const currentIST = getCurrentISTTime();
+  const nowMs = Date.now();
   const tomorrowStr = getTomorrowISTDateString(calendarDate);
-
-  const rolloverTimeStr = AppConfig.BUSINESS.OPERATIONAL_ROLLOVER_TIME || '15:00';
-  const rolloverCutoff = parseTimeToDateIST(calendarDate, rolloverTimeStr);
-  const beforeOrAfterRollover = currentIST <= rolloverCutoff ? 'BEFORE_ROLLOVER' : 'AFTER_ROLLOVER';
-
-  // Find next upcoming published menu date for preparationDate (independent of inventory batches)
-  let menuQuery = supabase
-    .from('menu_schedules')
-    .select('id, menu_date')
-    .eq('is_published', true)
-    .gt('menu_date', calendarDate)
-    .order('menu_date', { ascending: true })
-    .limit(1);
-
-  if (stallId) {
-    menuQuery = menuQuery.eq('stall_id', stallId);
-  }
-
-  console.log('[INSTRUMENTATION: resolveSharedOperationalDate - SUPABASE QUERY]', JSON.stringify({
-    table: 'menu_schedules',
-    filter_is_published: true,
-    filter_gt_menu_date: calendarDate,
-    filter_stall_id: stallId || 'none',
-    timestamp: new Date().toISOString(),
-  }, null, 2));
-
-  const { data: upcomingMenus, error: upcomingMenusError } = await menuQuery;
-
-  let nextValidServiceDate: string | null = null;
-  if (upcomingMenus && upcomingMenus.length > 0) {
-    nextValidServiceDate = upcomingMenus[0].menu_date;
-  }
-
-  const preparationDate = nextValidServiceDate || tomorrowStr;
-
-  console.log('[INSTRUMENTATION: resolveSharedOperationalDate - SUPABASE RESULT]', JSON.stringify({
-    calendarDate,
-    tomorrowStr,
-    upcomingMenus: upcomingMenus || [],
-    error: upcomingMenusError || null,
-    nextValidServiceDate,
-    preparationDate,
-  }, null, 2));
 
   const logAndReturn = (
     resolvedDate: string | null,
-    reasonText: string
+    prepDate: string,
+    reasonText: string,
+    deliveryEndMs?: number
   ): OperationalContextResult => {
     const result: OperationalContextResult = {
       calendarDate,
       resolvedOperationalDate: resolvedDate,
-      preparationDate,
+      preparationDate: prepDate,
+      activeMenuDeliveryEndMs: deliveryEndMs,
       reason: reasonText,
       resolutionReason: reasonText,
       isResolving: false,
     };
 
     console.log('[INSTRUMENTATION: resolveSharedOperationalDate - RESULT]', JSON.stringify({
-      nowIST: currentIST.toISOString(),
+      nowIST: new Date(nowMs).toISOString(),
       calendarDate,
-      rolloverTime: rolloverTimeStr,
-      beforeOrAfterRollover,
-      previousOperationsDate: calendarDate,
       resolvedOperationsDate: resolvedDate,
-      preparationDate,
+      preparationDate: prepDate,
       resolutionReason: reasonText,
-      activeMenuDate: nextValidServiceDate,
     }, null, 2));
 
     return result;
   };
 
   if (!stallId) {
-    return logAndReturn(calendarDate, 'No stallId provided');
+    return logAndReturn(calendarDate, tomorrowStr, 'No stallId provided');
   }
 
-  // Before rollover (<= 15:00 IST): today is active operations
-  if (beforeOrAfterRollover === 'BEFORE_ROLLOVER') {
-    return logAndReturn(calendarDate, 'Before rollover cutoff');
+  // Fetch upcoming menus starting from today to determine which is active based on explicit delivery end time
+  const { data: upcomingMenus, error: upcomingMenusError } = await supabase
+    .from('menu_schedules')
+    .select('id, menu_date, delivery_end_at')
+    .eq('stall_id', stallId)
+    .eq('is_published', true)
+    .gte('menu_date', calendarDate)
+    .order('menu_date', { ascending: true })
+    .limit(3);
+
+  console.log('[INSTRUMENTATION: resolveSharedOperationalDate - SUPABASE RESULT]', JSON.stringify({
+    calendarDate,
+    tomorrowStr,
+    upcomingMenus: upcomingMenus || [],
+    error: upcomingMenusError || null,
+  }, null, 2));
+
+  let activeDate: string | null = null;
+  let activeDeliveryEndMs: number | undefined;
+  let firstUpcomingDate: string | null = null;
+
+  if (upcomingMenus && upcomingMenus.length > 0) {
+    firstUpcomingDate = upcomingMenus[0].menu_date;
+    
+    // The active menu is the first one where the delivery window hasn't fully expired
+    for (const menu of upcomingMenus) {
+      if (menu.delivery_end_at) {
+        const endMs = new Date(menu.delivery_end_at).getTime();
+        if (nowMs <= endMs) {
+          activeDate = menu.menu_date;
+          activeDeliveryEndMs = endMs;
+          break;
+        }
+      }
+    }
   }
 
-  // After rollover (> 15:00 IST): today's operational window is completed
-  // Check if there is an upcoming valid service date
-  if (nextValidServiceDate) {
-    return logAndReturn(nextValidServiceDate, 'After rollover: next valid service date found');
+  const preparationDate = activeDate || firstUpcomingDate || tomorrowStr;
+
+  if (activeDate) {
+    return logAndReturn(activeDate, preparationDate, 'Found active menu based on explicit delivery_end_at', activeDeliveryEndMs);
   }
 
-  // After rollover and no upcoming published menu or batch: return null for resolvedOperationalDate
-  return logAndReturn(null, 'After rollover: no active or upcoming service date');
+  return logAndReturn(null, preparationDate, 'All fetched menus have expired and no future menus found');
 }
