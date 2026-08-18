@@ -15,13 +15,15 @@ interface MealCardProps {
   onAddToCart?: () => void | boolean;
   compact?: boolean;
   prominent?: boolean;
+  dailyMenu?: boolean;
+  verticalList?: boolean;
   isOrderable?: boolean;
   inventoryStatus?: 'pending' | 'available' | 'low_stock' | 'out_of_stock' | 'not_in_batch';
   availableQuantity?: number;
   availability?: CustomerMealAvailabilityResult;
 }
 
-export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, isOrderable, inventoryStatus = 'pending', availableQuantity, availability }) => {
+export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, compact, prominent, dailyMenu, verticalList, isOrderable, inventoryStatus = 'pending', availableQuantity, availability }) => {
   const [isAdded, setIsAdded] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -183,6 +185,110 @@ export const MealCard: React.FC<MealCardProps> = ({ meal, onPress, onAddToCart, 
     );
   }
 
+  // ─── Daily Menu variant (Ultra Compact) ─────────
+  if (dailyMenu) {
+    return (
+      <TouchableOpacity style={[styles.dailyMenuCard, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
+        {meal.imageUrl ? (
+          <Image 
+            source={{ uri: meal.imageUrl }} 
+            style={[styles.dailyMenuImage, unavailable && styles.unavailableImage]} 
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            recyclingKey={meal.id}
+          />
+        ) : (
+          <View style={[styles.dailyMenuImage, unavailable && styles.unavailableImage]} />
+        )}
+        {unavailable && (
+          <View style={styles.unavailableBadge}>
+            <Text style={styles.unavailableBadgeText}>{unavailableText}</Text>
+          </View>
+        )}
+        {renderInventoryBadge() || (
+          !unavailable && meal.tags && meal.tags.length > 0 && (
+            <View style={[styles.tagContainer, { backgroundColor: Colors.primary }]}>
+              <Text style={styles.tag}>{meal.tags[0]}</Text>
+            </View>
+          )
+        )}
+        <View style={styles.dailyMenuInfo}>
+          <View style={styles.row}>
+            <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
+            <Text style={[styles.dailyMenuName, unavailable && styles.unavailableText]} numberOfLines={1}>{meal.name}</Text>
+          </View>
+          <View style={styles.dailyMenuFooter}>
+            <Text style={[styles.dailyMenuPrice, unavailable && styles.unavailableText]}>{formatCurrency(meal.price)}</Text>
+            {!unavailable && onAddToCart && (
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                  style={[styles.dailyMenuAddBtn, isAdded && styles.dailyMenuAddBtnAdded]}
+                  onPress={handleAddPress}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={isAdded ? `${meal.name} added to cart` : `Add ${meal.name} to cart`}
+                >
+                  <Ionicons name={isAdded ? 'checkmark' : 'add'} size={14} color={Colors.white} />
+                  <Text style={styles.dailyMenuAddText}>{isAdded ? 'Added' : 'Add'}</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // ─── Vertical List variant (Zomato style) ─────────
+  if (verticalList) {
+    return (
+      <TouchableOpacity style={[styles.verticalListCard, unavailable && styles.unavailableCard]} onPress={onPress} activeOpacity={0.8}>
+        <View style={styles.verticalListInfo}>
+          <View style={[styles.row, { marginBottom: 6 }]}>
+            <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
+            {renderInventoryBadge() || (
+              !unavailable && meal.tags && meal.tags.length > 0 && (
+                <View style={styles.verticalListTag}>
+                  <Text style={styles.tag}>{meal.tags[0]}</Text>
+                </View>
+              )
+            )}
+          </View>
+          <Text style={[styles.verticalListName, unavailable && styles.unavailableText]} numberOfLines={2}>{meal.name}</Text>
+          <Text style={[styles.verticalListPrice, unavailable && styles.unavailableText]}>{formatCurrency(meal.price)}</Text>
+          <Text style={[styles.verticalListDesc, unavailable && styles.unavailableText]} numberOfLines={2}>{meal.description}</Text>
+        </View>
+        <View style={styles.verticalListImageContainer}>
+          {meal.imageUrl ? (
+            <Image 
+              source={{ uri: meal.imageUrl }} 
+              style={[styles.verticalListImage, unavailable && styles.unavailableImage]} 
+              cachePolicy="memory-disk"
+              contentFit="cover"
+              recyclingKey={meal.id}
+            />
+          ) : (
+            <View style={[styles.verticalListImage, unavailable && styles.unavailableImage]} />
+          )}
+          {!unavailable && onAddToCart && (
+            <Animated.View style={[styles.verticalListAddBtnWrapper, { transform: [{ scale: scaleAnim }] }]}>
+              <TouchableOpacity
+                style={[styles.verticalListAddBtn, isAdded && styles.verticalListAddBtnAdded]}
+                onPress={handleAddPress}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={isAdded ? `${meal.name} added to cart` : `Add ${meal.name} to cart`}
+              >
+                <Text style={styles.verticalListAddText}>{isAdded ? 'ADDED' : 'ADD'}</Text>
+                <Ionicons name={isAdded ? 'checkmark' : 'add'} size={14} color={isAdded ? Colors.white : Colors.success} style={{ marginLeft: 4, marginTop: 1 }} />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   if (compact) {
     return (
       <TouchableOpacity style={styles.compactCard} onPress={onPress} activeOpacity={0.7}>
@@ -311,7 +417,7 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: Spacing.md, right: Spacing.md,
   },
   addButton: {
-    backgroundColor: Colors.primary, width: 36, height: 36,
+    backgroundColor: Colors.textSecondary, width: 36, height: 36,
     borderRadius: Radii.full, alignItems: 'center', justifyContent: 'center',
     ...Shadows.sm,
   },
@@ -327,7 +433,7 @@ const styles = StyleSheet.create({
   compactInfo: { padding: Spacing.sm },
   compactName: { fontSize: Typography.size.sm, fontFamily: Typography.family.medium, color: Colors.textPrimary },
   compactPriceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  compactPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.primary },
+  compactPrice: { fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   compactServing: { fontSize: Typography.size.xs, color: Colors.textSecondary },
   servingSize: { fontSize: Typography.size.sm, color: Colors.textSecondary, fontFamily: Typography.family.medium },
   // Prominent variant (Today's Menu)
@@ -350,14 +456,14 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   prominentPrice: {
-    fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.primary,
+    fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.textPrimary,
   },
   prominentServing: {
     fontSize: Typography.size.xs, color: Colors.textSecondary, marginTop: 1,
   },
   prominentAddBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.primary, borderRadius: Radii.full,
+    backgroundColor: Colors.textSecondary, borderRadius: Radii.full,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs,
   },
   prominentAddBtnAdded: {
@@ -365,5 +471,90 @@ const styles = StyleSheet.create({
   },
   prominentAddText: {
     fontSize: Typography.size.xs, fontFamily: Typography.family.semiBold, color: Colors.white,
+  },
+  // Daily Menu variant
+  dailyMenuCard: {
+    width: 155, backgroundColor: Colors.surface, borderRadius: Radii.md,
+    ...Shadows.sm, overflow: 'hidden', marginRight: Spacing.sm,
+  },
+  dailyMenuImage: { width: '100%', height: 105, backgroundColor: Colors.surfaceElevated },
+  dailyMenuInfo: { padding: Spacing.sm, paddingTop: Spacing.xs },
+  dailyMenuName: {
+    fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+    flex: 1,
+  },
+  dailyMenuFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 4,
+  },
+  dailyMenuPrice: {
+    fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+  },
+  dailyMenuAddBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: Colors.textSecondary, borderRadius: Radii.sm,
+    paddingHorizontal: Spacing.xs, paddingVertical: 4,
+  },
+  dailyMenuAddBtnAdded: {
+    backgroundColor: Colors.success,
+  },
+  dailyMenuAddText: {
+    fontSize: 10, fontFamily: Typography.family.semiBold, color: Colors.white,
+  },
+  // Vertical List variant
+  verticalListCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xl,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  verticalListInfo: {
+    flex: 1,
+    paddingRight: Spacing.md,
+    justifyContent: 'flex-start',
+  },
+  verticalListTag: {
+    backgroundColor: Colors.primary, borderRadius: Radii.sm,
+    paddingHorizontal: Spacing.sm, paddingVertical: 2,
+  },
+  verticalListName: {
+    fontSize: Typography.size.md, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  verticalListPrice: {
+    fontSize: Typography.size.base, fontFamily: Typography.family.bold, color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  verticalListDesc: {
+    fontSize: Typography.size.sm, color: Colors.textSecondary, lineHeight: 18,
+  },
+  verticalListImageContainer: {
+    alignItems: 'center',
+    position: 'relative',
+    paddingBottom: Spacing.md, // Make space for the overlapping button
+  },
+  verticalListImage: {
+    width: 130, height: 130, borderRadius: Radii.lg, backgroundColor: Colors.surfaceElevated,
+  },
+  verticalListAddBtnWrapper: {
+    position: 'absolute',
+    bottom: 0, 
+  },
+  verticalListAddBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.textPrimary, borderRadius: Radii.md,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
+    width: 100,
+    ...Shadows.md,
+    borderWidth: 1.5,
+    borderColor: Colors.surface,
+  },
+  verticalListAddBtnAdded: {
+    backgroundColor: Colors.success,
+  },
+  verticalListAddText: {
+    fontSize: Typography.size.sm, fontFamily: Typography.family.bold, color: Colors.white,
   },
 });

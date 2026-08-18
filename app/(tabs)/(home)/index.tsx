@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SectionList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -109,8 +109,30 @@ export default function HomeScreen() {
   ]);
 
 
-  // ─── Browse Catalog ───────────────────────────────────────
+  // ─── Daily Menu Ordering ──────────────────────────────────
+  const getComboPriority = (meal: any) => {
+    const name = meal.name?.toLowerCase() || '';
+    if (name.includes('2') && name.includes('roll')) {
+      return 1;
+    }
+    if (name.includes('roll') && name.includes('bowl')) {
+      return 2;
+    }
+    return 3;
+  };
 
+  const groupedDailyMenu = useMemo(() => {
+    const rolls = availableMeals.filter((m: any) => m.category === 'roll');
+    const bowls = availableMeals.filter((m: any) => m.category === 'bowl');
+    const combos = availableMeals.filter((m: any) => m.category === 'combo');
+    
+    // Sort combos by priority
+    combos.sort((a: any, b: any) => getComboPriority(a) - getComboPriority(b));
+
+    return { rolls, bowls, combos };
+  }, [availableMeals]);
+
+  // ─── Browse Catalog ───────────────────────────────────────
   const filteredCatalog = useMemo(() => {
     const baseFiltered = allMeals.filter((m) => {
       const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
@@ -135,6 +157,24 @@ export default function HomeScreen() {
       return 0;
     });
   }, [allMeals, selectedCategory, search, availableMeals]);
+
+  const listSections = useMemo(() => {
+    const s: any[] = [];
+    if (availableMeals.length > 0) {
+      if (groupedDailyMenu.rolls.length > 0) {
+        s.push({ title: '🥙 ROLLS', data: groupedDailyMenu.rolls, type: 'daily' });
+      }
+      if (groupedDailyMenu.bowls.length > 0) {
+        s.push({ title: '🥣 BOWLS', data: groupedDailyMenu.bowls, type: 'daily' });
+      }
+      if (groupedDailyMenu.combos.length > 0) {
+        s.push({ title: '🎁 COMBOS', data: groupedDailyMenu.combos, type: 'daily' });
+      }
+    }
+    
+    s.push({ title: 'Browse Catalog', data: filteredCatalog, type: 'catalog' });
+    return s;
+  }, [groupedDailyMenu, filteredCatalog, availableMeals.length]);
 
   // ─── Loading ─────────────────────────────────────────────
   if (isLoading) {
@@ -310,104 +350,79 @@ export default function HomeScreen() {
     statusSubtitle = 'Ordering is currently closed.';
   }
 
-  const renderHeader = () => (
-    <>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>{getGreeting()} 👋</Text>
-          <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+  const renderListHeader = () => {
+    return (
+      <View style={{ paddingBottom: Spacing.sm }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+            <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
+          </View>
+          <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(tabs)/(notifications)' as any)}>
+            <Ionicons name="notifications-outline" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/(tabs)/(notifications)' as any)}>
-          <Ionicons name="notifications-outline" size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
 
-      {/* Store Status Banner */}
-      <View style={[
-        styles.statusBanner,
-        { backgroundColor: canOrder ? Colors.successLight : Colors.primaryBg }
-      ]}>
-        <Ionicons name={statusIcon} size={24} color={statusColor} />
-        <View style={styles.statusInfo}>
-          <Text style={[styles.statusTitle, { color: statusColor }]}>{statusTitle}</Text>
-          <Text style={styles.statusSubtitle}>{statusSubtitle}</Text>
+        {/* Store Status Banner */}
+        <View style={[
+          styles.statusBanner,
+          { backgroundColor: canOrder ? Colors.successLight : Colors.primaryBg }
+        ]}>
+          <Ionicons name={statusIcon} size={24} color={statusColor} />
+          <View style={styles.statusInfo}>
+            <Text style={[styles.statusTitle, { color: statusColor }]}>{statusTitle}</Text>
+            <Text style={styles.statusSubtitle}>{statusSubtitle}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* ─── Section: Operational Menu ─── */}
-      {availableMeals.length > 0 && (
-        <Section title={`Menu for ${formatFriendlyDate(opFacts.operationalDate)}`}>
-          {(!inventory || inventory.length === 0) && (opFacts.status === 'PICKUP_ACTIVE' || opFacts.status === 'ORDERING_CLOSED') && (
-            <View style={styles.noBatchBanner}>
-              <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} style={{ marginRight: Spacing.xs }} />
-              <Text style={styles.noBatchText}>Live pickup stock has not been loaded yet.</Text>
-            </View>
+        {/* Daily Menu Title */}
+        {availableMeals.length > 0 && (
+          <View style={{ marginTop: Spacing.sm, marginBottom: Spacing.xs }}>
+            <Text style={styles.catalogTitle}>{`Menu for ${formatFriendlyDate(opFacts.operationalDate)}`}</Text>
+            {(!inventory || inventory.length === 0) && (opFacts.status === 'PICKUP_ACTIVE' || opFacts.status === 'ORDERING_CLOSED') && (
+              <View style={[styles.noBatchBanner, { marginTop: Spacing.sm }]}>
+                <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} style={{ marginRight: Spacing.xs }} />
+                <Text style={styles.noBatchText}>Live pickup stock has not been loaded yet.</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderSectionHeader = ({ section }: { section: any }) => {
+    if (section.type === 'catalog') {
+      return (
+        <View style={{ paddingTop: Spacing.md, paddingBottom: Spacing.sm, backgroundColor: Colors.background }}>
+          <View style={styles.sectionDivider} />
+          <Text style={styles.catalogTitle}>Browse Catalog</Text>
+          <SearchBar value={search} onChangeText={setSearch} placeholder="Search the catalog..." />
+          <CategoryPills selected={selectedCategory} onSelect={setSelectedCategory} />
+          {section.data.length === 0 && (
+            <EmptyState
+              icon="restaurant-outline"
+              title="No items found"
+              subtitle={
+                search.trim()
+                  ? `No results for "${search}". Try a different search.`
+                  : 'No items in this category.'
+              }
+            />
           )}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.xs }}>
-            {availableMeals.map((meal) => {
-              const invItem = inventoryByMealId.get(meal.id);
-              const availability = resolveCustomerMealAvailability({
-                mealId: meal.id,
-                serviceDate: opFacts?.operationalDate,
-                isPublished: true,
-                mealIsAvailable: meal.isAvailable,
-                inventoryMode,
-                customerAvailable: invItem ? invItem.customer_available : null,
-                activeBatchId,
-                canPlaceOrders: Boolean(canOrder),
-                logDiagnostic: true,
-              });
+        </View>
+      );
+    }
 
-              const handleAdd = availability.canAdd ? (): boolean => {
-                if (inventoryMode === 'LIVE_INVENTORY' && availability.availableQuantity !== null) {
-                  const currentQty = useCartStore.getState().items.find(i => i.meal.id === meal.id)?.quantity || 0;
-                  if (currentQty >= availability.availableQuantity) {
-                    alert(`Only ${availability.availableQuantity} available.`);
-                    return false;
-                  }
-                }
-                addItem(meal, opFacts?.operationalDate, 1);
-                return true;
-              } : undefined;
+    return (
+      <View style={styles.dailyMenuCategoryContainer}>
+        <Text style={styles.dailyMenuCategoryTitle}>{section.title}</Text>
+      </View>
+    );
+  };
 
-              return (
-                <MealCard
-                  key={meal.id}
-                  meal={meal}
-                  prominent
-                  onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
-                  onAddToCart={handleAdd}
-                  isOrderable={availability.canAdd}
-                  availability={availability}
-                />
-              );
-            })}
-          </ScrollView>
-        </Section>
-      )}
-
-      {/* ─── Section: Browse Catalog ─── */}
-      <SearchBar value={search} onChangeText={setSearch} placeholder="Search the catalog..." />
-      <CategoryPills selected={selectedCategory} onSelect={setSelectedCategory} />
-      
-      <Text style={styles.catalogTitle}>Browse Catalog</Text>
-      
-      {filteredCatalog.length === 0 && (
-        <EmptyState
-          icon="restaurant-outline"
-          title="No items found"
-          subtitle={
-            search.trim()
-              ? `No results for "${search}". Try a different search.`
-              : 'No items in this category.'
-          }
-        />
-      )}
-    </>
-  );
-
-  const renderMealItem = ({ item: meal }: { item: any }) => {
+  const renderMealItem = ({ item: meal, section }: { item: any, section: any }) => {
     const isScheduled = availableMeals.some(m => m.id === meal.id);
     const invItem = inventoryByMealId.get(meal.id);
     const availability = resolveCustomerMealAvailability({
@@ -437,6 +452,7 @@ export default function HomeScreen() {
     return (
       <MealCard
         meal={meal}
+        verticalList={section.type === 'daily'}
         onPress={() => router.push(`/(tabs)/(home)/meal/${meal.id}` as any)}
         onAddToCart={handleAdd}
         isOrderable={availability.canAdd}
@@ -448,16 +464,18 @@ export default function HomeScreen() {
   // ─── Normal States ────────────────────────────────────────
   return (
     <ScreenWrapper scroll={false}>
-      <FlatList
-        data={filteredCatalog}
+      <SectionList
+        sections={listSections}
         keyExtractor={(meal) => meal.id}
         renderItem={renderMealItem}
-        ListHeaderComponent={renderHeader}
+        renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={renderListHeader}
         showsVerticalScrollIndicator={false}
         initialNumToRender={6}
         maxToRenderPerBatch={6}
         windowSize={5}
         contentContainerStyle={{ paddingBottom: Spacing['3xl'] }}
+        stickySectionHeadersEnabled={false}
       />
       <StickyCartBar />
     </ScreenWrapper>
@@ -467,14 +485,15 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: Spacing.xl, marginBottom: Spacing.base,
+    paddingTop: Spacing.md, marginBottom: Spacing.xs,
   },
   greeting: { fontSize: Typography.size.sm, color: Colors.textSecondary, fontFamily: Typography.family.regular },
-  userName: { fontSize: Typography.size.xl, fontFamily: Typography.family.bold, color: Colors.textPrimary },
+  userName: { fontSize: Typography.size.lg, fontFamily: Typography.family.bold, color: Colors.textPrimary },
   notifButton: { position: 'relative', padding: Spacing.sm },
   statusBanner: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    padding: Spacing.base, borderRadius: Radii.lg, marginBottom: Spacing.base,
+    paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+    borderRadius: Radii.lg, marginBottom: Spacing.sm,
   },
   statusInfo: { flex: 1 },
   statusTitle: { fontSize: Typography.size.base, fontFamily: Typography.family.bold },
@@ -535,9 +554,30 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   catalogTitle: {
-    fontSize: Typography.size.lg,
+    fontSize: Typography.size.xl,
     fontFamily: Typography.family.bold,
     color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.base,
+    letterSpacing: -0.5,
+  },
+  dailyMenuCategoryContainer: {
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.base,
+    backgroundColor: Colors.borderLight,
     marginBottom: Spacing.sm,
+  },
+  dailyMenuCategoryTitle: {
+    fontSize: Typography.size.md,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionDivider: {
+    height: 8,
+    backgroundColor: Colors.surfaceElevated,
+    marginHorizontal: -Spacing.base, // bleed to edge
+    marginBottom: Spacing.lg,
   },
 });
