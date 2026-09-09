@@ -1,0 +1,618 @@
+{
+  "schema": {
+    "cities": {
+      "columns": [
+        "id          UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name        TEXT NOT NULL",
+        "state       TEXT NOT NULL",
+        "is_active   BOOLEAN NOT NULL DEFAULT true",
+        "created_at  TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "universities": {
+      "columns": [
+        "id          UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name        TEXT NOT NULL",
+        "city_id     UUID NOT NULL REFERENCES cities(id) ON DELETE RESTRICT",
+        "logo_url    TEXT",
+        "created_at  TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "colleges": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name            TEXT NOT NULL",
+        "university_id   UUID NOT NULL REFERENCES universities(id) ON DELETE RESTRICT",
+        "city_id         UUID NOT NULL REFERENCES cities(id) ON DELETE RESTRICT",
+        "address         TEXT NOT NULL",
+        "is_active       BOOLEAN NOT NULL DEFAULT true",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "users": {
+      "columns": [
+        "id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE",
+        "name        TEXT NOT NULL DEFAULT ''",
+        "email       TEXT NOT NULL DEFAULT ''",
+        "phone       TEXT NOT NULL DEFAULT ''",
+        "role        user_role NOT NULL DEFAULT 'customer'",
+        "avatar_url  TEXT",
+        "college_id  UUID REFERENCES colleges(id) ON DELETE SET NULL",
+        "city_id     UUID REFERENCES cities(id) ON DELETE SET NULL",
+        "created_at  TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "addresses": {
+      "columns": [
+        "id            UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE",
+        "label         TEXT NOT NULL",
+        "full_address  TEXT NOT NULL",
+        "landmark      TEXT",
+        "is_default    BOOLEAN NOT NULL DEFAULT false",
+        "created_at    TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "stalls": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name            TEXT NOT NULL",
+        "college_id      UUID NOT NULL REFERENCES colleges(id) ON DELETE RESTRICT",
+        "operator_id     UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "description     TEXT NOT NULL DEFAULT ''",
+        "image_url       TEXT",
+        "is_active       BOOLEAN NOT NULL DEFAULT true",
+        "rating          NUMERIC(3,2) NOT NULL DEFAULT 0.00",
+        "total_ratings   INTEGER NOT NULL DEFAULT 0",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "is_primary BOOLEAN NOT NULL DEFAULT false"
+      ]
+    },
+    "meals": {
+      "columns": [
+        "id                UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name              TEXT NOT NULL",
+        "description       TEXT NOT NULL DEFAULT ''",
+        "price             NUMERIC(10,2) NOT NULL",
+        "original_price    NUMERIC(10,2)",
+        "category          meal_category NOT NULL",
+        "type              meal_type NOT NULL",
+        "stall_id          UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "image_url         TEXT NOT NULL DEFAULT ''",
+        "is_available      BOOLEAN NOT NULL DEFAULT true",
+        "is_featured       BOOLEAN NOT NULL DEFAULT false",
+        "rating            NUMERIC(3,2) NOT NULL DEFAULT 0.00",
+        "total_ratings     INTEGER NOT NULL DEFAULT 0",
+        "preparation_time  INTEGER NOT NULL DEFAULT 15",
+        "nutrition         JSONB",
+        "tags              TEXT[] NOT NULL DEFAULT '{}'",
+        "created_at        TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "serving_size TEXT"
+      ]
+    },
+    "orders": {
+      "columns": [
+        "id                    UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "order_number          TEXT NOT NULL UNIQUE",
+        "user_id               UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "customer_name         TEXT NOT NULL",
+        "stall_id              UUID NOT NULL REFERENCES stalls(id) ON DELETE RESTRICT",
+        "stall_name            TEXT NOT NULL",
+        "status                order_status NOT NULL DEFAULT 'pending'",
+        "order_type            order_type NOT NULL",
+        "payment_status        payment_status NOT NULL DEFAULT 'pending'",
+        "subtotal              NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "tax                   NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "discount              NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "total                 NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "notes                 TEXT",
+        "estimated_ready_time  TIMESTAMPTZ",
+        "created_at            TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "pickup_date DATE",
+        "expected_pickup_slot TEXT",
+        "payment_method payment_method_type",
+        "payment_verification_status payment_verification_status,\nADD COLUMN IF NOT EXISTS payment_proof_deadline TIMESTAMPTZ"
+      ]
+    },
+    "order_items": {
+      "columns": [
+        "id                    UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "order_id              UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE",
+        "meal_id               UUID NOT NULL REFERENCES meals(id) ON DELETE RESTRICT",
+        "meal_name             TEXT NOT NULL",
+        "quantity              INTEGER NOT NULL DEFAULT 1",
+        "unit_price            NUMERIC(10,2) NOT NULL",
+        "total_price           NUMERIC(10,2) NOT NULL",
+        "special_instructions  TEXT",
+        "created_at            TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,\nADD COLUMN IF NOT EXISTS credits_used INTEGER NOT NULL DEFAULT 0"
+      ]
+    },
+    "subscription_plans": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "name            TEXT NOT NULL",
+        "description     TEXT NOT NULL DEFAULT ''",
+        "price           NUMERIC(10,2) NOT NULL",
+        "duration_days   INTEGER NOT NULL",
+        "meals_per_day   INTEGER NOT NULL",
+        "total_meals     INTEGER NOT NULL",
+        "features        TEXT[] NOT NULL DEFAULT '{}'",
+        "is_popular      BOOLEAN NOT NULL DEFAULT false",
+        "badge           TEXT",
+        "is_active       BOOLEAN NOT NULL DEFAULT true",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "category_credit_costs JSONB NOT NULL DEFAULT '{}'::jsonb"
+      ]
+    },
+    "subscriptions": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id         UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "plan_id         UUID NOT NULL REFERENCES subscription_plans(id) ON DELETE RESTRICT",
+        "plan_name       TEXT NOT NULL",
+        "status          subscription_status NOT NULL DEFAULT 'active'",
+        "start_date      DATE NOT NULL",
+        "end_date        DATE NOT NULL",
+        "total_meals     INTEGER NOT NULL",
+        "consumed_meals  INTEGER NOT NULL DEFAULT 0",
+        "remaining_meals INTEGER NOT NULL",
+        "meals_per_day   INTEGER NOT NULL",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "last_usage_date DATE,\nADD COLUMN IF NOT EXISTS daily_credits_used INTEGER NOT NULL DEFAULT 0",
+        "accepted_terms_version TEXT,\nADD COLUMN IF NOT EXISTS accepted_terms_at TIMESTAMPTZ",
+        "extended_days INTEGER NOT NULL DEFAULT 0",
+        "purchase_price NUMERIC(10,2),\nADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'INR'",
+        "entitlement_credit_costs JSONB,\r\n  ADD COLUMN IF NOT EXISTS entitlement_features TEXT[]"
+      ]
+    },
+    "meal_histories": {
+      "columns": [
+        "id                UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "subscription_id   UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE",
+        "meal_name         TEXT NOT NULL",
+        "date              DATE NOT NULL",
+        "time              TEXT NOT NULL",
+        "category          meal_category NOT NULL",
+        "created_at        TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "inventory_items": {
+      "columns": [
+        "id                  UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "meal_id             UUID NOT NULL REFERENCES meals(id) ON DELETE CASCADE",
+        "meal_name           TEXT NOT NULL",
+        "stall_id            UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "category            meal_category NOT NULL",
+        "total_quantity      INTEGER NOT NULL DEFAULT 0",
+        "sold_quantity       INTEGER NOT NULL DEFAULT 0",
+        "reserved_quantity   INTEGER NOT NULL DEFAULT 0",
+        "available_quantity  INTEGER NOT NULL DEFAULT 0",
+        "price               NUMERIC(10,2) NOT NULL",
+        "is_available        BOOLEAN NOT NULL DEFAULT true,  \n  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "created_at          TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "meal_reservations": {
+      "columns": [
+        "id                  UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id             UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "inventory_item_id   UUID NOT NULL REFERENCES inventory_items(id) ON DELETE RESTRICT",
+        "meal_name           TEXT NOT NULL",
+        "stall_name          TEXT NOT NULL",
+        "quantity            INTEGER NOT NULL DEFAULT 1",
+        "pickup_time         TIMESTAMPTZ NOT NULL",
+        "status              reservation_status NOT NULL DEFAULT 'pending'",
+        "created_at          TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "notifications": {
+      "columns": [
+        "id          UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE",
+        "title       TEXT NOT NULL",
+        "body        TEXT NOT NULL",
+        "type        notification_type NOT NULL",
+        "is_read     BOOLEAN NOT NULL DEFAULT false",
+        "data        JSONB",
+        "created_at  TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "payment_records": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "order_id        UUID REFERENCES orders(id) ON DELETE SET NULL",
+        "subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL",
+        "amount          NUMERIC(10,2) NOT NULL",
+        "status          payment_status NOT NULL DEFAULT 'pending'",
+        "method          TEXT NOT NULL DEFAULT ''",
+        "transaction_id  TEXT",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "menu_schedules": {
+      "columns": [
+        "id              UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "stall_id        UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "menu_date       DATE NOT NULL",
+        "visible_from    TIMESTAMPTZ NOT NULL",
+        "order_cutoff    TIMESTAMPTZ NOT NULL",
+        "is_published    BOOLEAN NOT NULL DEFAULT true",
+        "created_at      TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "delivery_start_at TIMESTAMPTZ,\nADD COLUMN delivery_end_at TIMESTAMPTZ"
+      ]
+    },
+    "menu_schedule_items": {
+      "columns": [
+        "id                      UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "menu_schedule_id        UUID NOT NULL REFERENCES menu_schedules(id) ON DELETE CASCADE",
+        "meal_id                 UUID NOT NULL REFERENCES meals(id) ON DELETE RESTRICT",
+        "created_at              TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "kitchen_holidays": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "date DATE NOT NULL UNIQUE",
+        "reason TEXT NOT NULL",
+        "is_active BOOLEAN NOT NULL DEFAULT true",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "holiday_date DATE NOT NULL",
+        "title TEXT NOT NULL",
+        "description TEXT",
+        "is_active BOOLEAN NOT NULL DEFAULT true",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL",
+        "UNIQUE(stall_id, holiday_date)"
+      ],
+      "addedColumns": []
+    },
+    "inventory_batches": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE RESTRICT",
+        "inventory_date DATE NOT NULL",
+        "window_start TIME NOT NULL",
+        "window_end TIME NOT NULL",
+        "status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed', 'cancelled'))",
+        "created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "notes TEXT",
+        "activated_at TIMESTAMPTZ",
+        "closed_at TIMESTAMPTZ",
+        "cancelled_at TIMESTAMPTZ",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "inventory_batch_items": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "inventory_batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE",
+        "meal_id UUID NOT NULL REFERENCES meals(id) ON DELETE RESTRICT",
+        "loaded_quantity INTEGER NOT NULL DEFAULT 0",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "CONSTRAINT inv_batch_item_unique UNIQUE (inventory_batch_id, meal_id)",
+        "CONSTRAINT inv_batch_loaded_non_negative CHECK (loaded_quantity >= 0)"
+      ],
+      "addedColumns": []
+    },
+    "inventory_movements": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "inventory_batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE",
+        "inventory_batch_item_id UUID NOT NULL REFERENCES inventory_batch_items(id) ON DELETE CASCADE",
+        "meal_id UUID NOT NULL REFERENCES meals(id) ON DELETE RESTRICT",
+        "movement_type TEXT NOT NULL CHECK (movement_type IN ('walk_in_sale', 'complimentary', 'damaged', 'wasted', 'stock_added', 'correction_increase', 'correction_decrease'))",
+        "quantity INTEGER NOT NULL CHECK (quantity > 0), -- Must be strictly positive; the type dictates inflow/outflow\n  reference_order_id UUID REFERENCES orders(id) ON DELETE SET NULL",
+        "created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT",
+        "note TEXT",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "payment_settings": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "recipient_name TEXT NOT NULL",
+        "upi_id TEXT NOT NULL",
+        "qr_image_path TEXT",
+        "is_active BOOLEAN NOT NULL DEFAULT true",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": []
+    },
+    "subscription_purchase_requests": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE",
+        "stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "plan_id UUID NOT NULL REFERENCES subscription_plans(id) ON DELETE CASCADE",
+        "expected_amount NUMERIC(10,2) NOT NULL CHECK (expected_amount >= 0)",
+        "status subscription_request_status NOT NULL DEFAULT 'awaiting_proof'",
+        "current_payment_proof_id UUID, -- Foreign key added below\n  requested_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "approved_at TIMESTAMPTZ",
+        "approved_by UUID REFERENCES users(id) ON DELETE SET NULL",
+        "rejected_at TIMESTAMPTZ",
+        "rejection_reason TEXT",
+        "created_subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+      ],
+      "addedColumns": [
+        "plan_name_snapshot TEXT,\r\n  ADD COLUMN IF NOT EXISTS base_amount_snapshot NUMERIC(10,2),\r\n  ADD COLUMN IF NOT EXISTS convenience_fee_percent_snapshot NUMERIC(5,2),\r\n  ADD COLUMN IF NOT EXISTS convenience_fee_snapshot NUMERIC(10,2),\r\n  ADD COLUMN IF NOT EXISTS currency_snapshot TEXT,\r\n  ADD COLUMN IF NOT EXISTS total_meals_snapshot INTEGER,\r\n  ADD COLUMN IF NOT EXISTS duration_days_snapshot INTEGER,\r\n  ADD COLUMN IF NOT EXISTS meals_per_day_snapshot INTEGER,\r\n  ADD COLUMN IF NOT EXISTS category_credit_costs_snapshot JSONB,\r\n  ADD COLUMN IF NOT EXISTS features_snapshot TEXT[]"
+      ]
+    },
+    "payment_proofs": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE",
+        "stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE",
+        "order_id UUID REFERENCES orders(id) ON DELETE CASCADE",
+        "subscription_request_id UUID REFERENCES subscription_purchase_requests(id) ON DELETE CASCADE",
+        "payment_context payment_context_type NOT NULL",
+        "expected_amount NUMERIC(10,2) NOT NULL CHECK (expected_amount >= 0)",
+        "upi_id_snapshot TEXT NOT NULL",
+        "recipient_name_snapshot TEXT NOT NULL",
+        "screenshot_path TEXT NOT NULL",
+        "screenshot_mime_type TEXT",
+        "screenshot_size_bytes BIGINT",
+        "status payment_proof_status NOT NULL DEFAULT 'pending'",
+        "submitted_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "verified_at TIMESTAMPTZ",
+        "verified_by UUID REFERENCES users(id) ON DELETE SET NULL",
+        "rejected_at TIMESTAMPTZ",
+        "rejection_reason TEXT",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+        "CONSTRAINT proof_target_check \n    CHECK ((order_id IS NOT NULL AND subscription_request_id IS NULL AND payment_context = 'order') OR\n           (subscription_request_id IS NOT NULL AND order_id IS NULL AND payment_context = 'subscription'))"
+      ],
+      "addedColumns": [
+        "screenshot_deleted_at TIMESTAMPTZ,\nADD COLUMN IF NOT EXISTS screenshot_delete_error TEXT,\nADD COLUMN IF NOT EXISTS screenshot_delete_attempted_at TIMESTAMPTZ"
+      ]
+    },
+    "subscription_credit_reservations": {
+      "columns": [
+        "id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\r\n  order_id UUID NOT NULL UNIQUE REFERENCES public.orders(id) ON DELETE RESTRICT,\r\n  subscription_id UUID NOT NULL REFERENCES public.subscriptions(id) ON DELETE RESTRICT,\r\n  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE RESTRICT,\r\n  service_date DATE NOT NULL,\r\n  credits INTEGER NOT NULL,\r\n  status TEXT NOT NULL DEFAULT 'reserved',\r\n  reserved_at TIMESTAMPTZ NOT NULL DEFAULT now(),\r\n  consumed_at TIMESTAMPTZ,\r\n  released_at TIMESTAMPTZ,\r\n  release_reason TEXT,\r\n  legacy_backfill BOOLEAN NOT NULL DEFAULT false,\r\n  legacy_state_verified BOOLEAN NOT NULL DEFAULT true,\r\n  CONSTRAINT chk_sub_res_status CHECK (status IN ('reserved', 'consumed', 'released', 'legacy_released_unverified')),\r\n  CONSTRAINT chk_sub_res_credits CHECK (credits > 0),\r\n  CONSTRAINT chk_sub_res_consumed_at CHECK (\r\n    (status = 'consumed' AND consumed_at IS NOT NULL) OR\r\n    (status != 'consumed' AND consumed_at IS NULL)\r\n  ),\r\n  CONSTRAINT chk_sub_res_released_at CHECK (\r\n    (status IN ('released', 'legacy_released_unverified') AND released_at IS NOT NULL) OR\r\n    (status NOT IN ('released', 'legacy_released_unverified') AND released_at IS NULL)\r\n  ),\r\n  CONSTRAINT chk_sub_res_mutual_exclusion CHECK (\r\n    NOT (consumed_at IS NOT NULL AND released_at IS NOT NULL)\r\n  )"
+      ],
+      "addedColumns": []
+    }
+  },
+  "policies": [
+    {
+      "name": "cities_read ON cities\n  FOR SELECT USING (true);\n\nCREATE POLICY universities_read ON universities\n  FOR SELECT USING (true);\n\nCREATE POLICY colleges_read ON colleges\n  FOR SELECT USING (true);\n\n\n-- ═══════════════════════════════════════════════════════════\n-- USERS\n-- Users can read and update their own profile only.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY users_own_select ON users\n  FOR SELECT USING (id = auth.uid());\n\nCREATE POLICY users_own_update ON users\n  FOR UPDATE USING (id = auth.uid())\n  WITH CHECK (id = auth.uid());\n\n-- Operations users can read customer profiles (for order fulfillment)\nCREATE POLICY users_ops_select ON users\n  FOR SELECT USING (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  );\n\n\n-- ═══════════════════════════════════════════════════════════\n-- ADDRESSES\n-- Users manage only their own addresses.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY addresses_own_select ON addresses\n  FOR SELECT USING (user_id = auth.uid());\n\nCREATE POLICY addresses_own_insert ON addresses\n  FOR INSERT WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY addresses_own_update ON addresses\n  FOR UPDATE USING (user_id = auth.uid())\n  WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY addresses_own_delete ON addresses\n  FOR DELETE USING (user_id = auth.uid());\n\n\n-- ═══════════════════════════════════════════════════════════\n-- STALLS\n-- Public read. Operators can update their own stalls.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY stalls_read ON stalls\n  FOR SELECT USING (true);\n\nCREATE POLICY stalls_operator_update ON stalls\n  FOR UPDATE USING (operator_id = auth.uid())\n  WITH CHECK (operator_id = auth.uid());\n\n\n-- ═══════════════════════════════════════════════════════════\n-- MEALS\n-- Public read. Operators can manage meals in their stalls.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY meals_read ON meals\n  FOR SELECT USING (true);\n\nCREATE POLICY meals_operator_insert ON meals\n  FOR INSERT WITH CHECK (is_stall_operator(stall_id));\n\nCREATE POLICY meals_operator_update ON meals\n  FOR UPDATE USING (is_stall_operator(stall_id))\n  WITH CHECK (is_stall_operator(stall_id));\n\nCREATE POLICY meals_operator_delete ON meals\n  FOR DELETE USING (is_stall_operator(stall_id));\n\n\n-- ═══════════════════════════════════════════════════════════\n-- ORDERS\n-- Customers: read/create own orders.\n-- Operators: read/update orders for their stalls.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY orders_customer_select ON orders\n  FOR SELECT USING (user_id = auth.uid());\n\nCREATE POLICY orders_customer_insert ON orders\n  FOR INSERT WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY orders_ops_select ON orders\n  FOR SELECT USING (is_stall_operator(stall_id));\n\nCREATE POLICY orders_ops_update ON orders\n  FOR UPDATE USING (is_stall_operator(stall_id))\n  WITH CHECK (is_stall_operator(stall_id));\n\n-- Kitchen staff can view all orders\nCREATE POLICY orders_kitchen_select ON orders\n  FOR SELECT USING (get_user_role() = 'kitchen');\n\n\n-- ═══════════════════════════════════════════════════════════\n-- ORDER ITEMS\n-- Same visibility as the parent order.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY order_items_customer_select ON order_items\n  FOR SELECT USING (\n    EXISTS (\n      SELECT 1 FROM orders WHERE orders.id = order_items.order_id\n        AND orders.user_id = auth.uid()\n    )\n  );\n\nCREATE POLICY order_items_customer_insert ON order_items\n  FOR INSERT WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM orders WHERE orders.id = order_items.order_id\n        AND orders.user_id = auth.uid()\n    )\n  );\n\nCREATE POLICY order_items_ops_select ON order_items\n  FOR SELECT USING (\n    EXISTS (\n      SELECT 1 FROM orders WHERE orders.id = order_items.order_id\n        AND is_stall_operator(orders.stall_id)\n    )\n  );\n\nCREATE POLICY order_items_kitchen_select ON order_items\n  FOR SELECT USING (get_user_role() = 'kitchen');\n\n\n-- ═══════════════════════════════════════════════════════════\n-- SUBSCRIPTION PLANS\n-- Public read (catalog).\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY plans_read ON subscription_plans\n  FOR SELECT USING (true);\n\n\n-- ═══════════════════════════════════════════════════════════\n-- SUBSCRIPTIONS\n-- Users see own. Ops can read for validation.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY subscriptions_own_select ON subscriptions\n  FOR SELECT USING (user_id = auth.uid());\n\nCREATE POLICY subscriptions_own_insert ON subscriptions\n  FOR INSERT WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY subscriptions_ops_select ON subscriptions\n  FOR SELECT USING (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  );\n\n\n-- ═══════════════════════════════════════════════════════════\n-- MEAL HISTORIES\n-- Users see their own consumption logs.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY meal_histories_own_select ON meal_histories\n  FOR SELECT USING (\n    EXISTS (\n      SELECT 1 FROM subscriptions\n      WHERE subscriptions.id = meal_histories.subscription_id\n        AND subscriptions.user_id = auth.uid()\n    )\n  );\n\nCREATE POLICY meal_histories_own_insert ON meal_histories\n  FOR INSERT WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM subscriptions\n      WHERE subscriptions.id = meal_histories.subscription_id\n        AND subscriptions.user_id = auth.uid()\n    )\n  );\n\n\n-- ═══════════════════════════════════════════════════════════\n-- NOTIFICATIONS\n-- Users read/update their own only.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY notifications_own_select ON notifications\n  FOR SELECT USING (user_id = auth.uid());\n\nCREATE POLICY notifications_own_update ON notifications\n  FOR UPDATE USING (user_id = auth.uid())\n  WITH CHECK (user_id = auth.uid());\n\n\n-- ═══════════════════════════════════════════════════════════\n-- INVENTORY ITEMS\n-- Public read. Operators update their stall inventory.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY inventory_read ON inventory_items\n  FOR SELECT USING (true);\n\nCREATE POLICY inventory_operator_insert ON inventory_items\n  FOR INSERT WITH CHECK (is_stall_operator(stall_id));\n\nCREATE POLICY inventory_operator_update ON inventory_items\n  FOR UPDATE USING (is_stall_operator(stall_id))\n  WITH CHECK (is_stall_operator(stall_id));\n\nCREATE POLICY inventory_operator_delete ON inventory_items\n  FOR DELETE USING (is_stall_operator(stall_id));\n\n\n-- ═══════════════════════════════════════════════════════════\n-- MEAL RESERVATIONS\n-- Customers manage their own. Operators see/update for stall.\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY reservations_customer_select ON meal_reservations\n  FOR SELECT USING (user_id = auth.uid());\n\nCREATE POLICY reservations_customer_insert ON meal_reservations\n  FOR INSERT WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY reservations_customer_update ON meal_reservations\n  FOR UPDATE USING (user_id = auth.uid())\n  WITH CHECK (user_id = auth.uid());\n\nCREATE POLICY reservations_ops_select ON meal_reservations\n  FOR SELECT USING (\n    EXISTS (\n      SELECT 1 FROM inventory_items\n      WHERE inventory_items.id = meal_reservations.inventory_item_id\n        AND is_stall_operator(inventory_items.stall_id)\n    )\n  );\n\nCREATE POLICY reservations_ops_update ON meal_reservations\n  FOR UPDATE USING (\n    EXISTS (\n      SELECT 1 FROM inventory_items\n      WHERE inventory_items.id = meal_reservations.inventory_item_id\n        AND is_stall_operator(inventory_items.stall_id)\n    )\n  );\n\n\n-- ═══════════════════════════════════════════════════════════\n-- PAYMENT RECORDS\n-- Users see their own payments (via order or subscription).\n-- ═══════════════════════════════════════════════════════════\n\nCREATE POLICY payments_own_select ON payment_records\n  FOR SELECT USING (\n    (order_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM orders WHERE orders.id = payment_records.order_id\n        AND orders.user_id = auth.uid()\n    ))\n    OR\n    (subscription_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM subscriptions WHERE subscriptions.id = payment_records.subscription_id\n        AND subscriptions.user_id = auth.uid()\n    ))\n  );\n\nCREATE POLICY payments_own_insert",
+      "table": "payment_records",
+      "using": null,
+      "withCheck": "(order_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM orders WHERE orders.id = payment_records.order_id\n        AND orders.user_id = auth.uid()\n    ))\n    OR\n    (subscription_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM subscriptions WHERE subscriptions.id = payment_records.subscription_id\n        AND subscriptions.user_id = auth.uid()\n    ))"
+    },
+    {
+      "name": "storage_meal_images_read ON storage.objects\n  FOR SELECT USING (bucket_id = 'meal-images');\n\n-- Allow authenticated users to upload (operators only in practice)\nCREATE POLICY storage_meal_images_insert ON storage.objects\n  FOR INSERT WITH CHECK (\n    bucket_id = 'meal-images'\n    AND auth.role() = 'authenticated'\n  );\n\n-- Allow owners to update/delete their uploads\nCREATE POLICY storage_meal_images_update ON storage.objects\n  FOR UPDATE USING (\n    bucket_id = 'meal-images'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\nCREATE POLICY storage_meal_images_delete ON storage.objects\n  FOR DELETE USING (\n    bucket_id = 'meal-images'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\n\n-- ─── User Avatars Bucket ────────────────────────────────────\n-- Public read, user can upload own avatar only.\n\nINSERT INTO storage.buckets (id, name, public)\nVALUES ('avatars', 'avatars', true)\nON CONFLICT (id) DO NOTHING;\n\nCREATE POLICY storage_avatars_read ON storage.objects\n  FOR SELECT USING (bucket_id = 'avatars');\n\nCREATE POLICY storage_avatars_insert ON storage.objects\n  FOR INSERT WITH CHECK (\n    bucket_id = 'avatars'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\nCREATE POLICY storage_avatars_update ON storage.objects\n  FOR UPDATE USING (\n    bucket_id = 'avatars'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\nCREATE POLICY storage_avatars_delete ON storage.objects\n  FOR DELETE USING (\n    bucket_id = 'avatars'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\n\n-- ─── Stall Images Bucket ───────────────────────────────────\n-- Public read, operators upload.\n\nINSERT INTO storage.buckets (id, name, public)\nVALUES ('stall-images', 'stall-images', true)\nON CONFLICT (id) DO NOTHING;\n\nCREATE POLICY storage_stall_images_read ON storage.objects\n  FOR SELECT USING (bucket_id = 'stall-images');\n\nCREATE POLICY storage_stall_images_insert",
+      "table": "storage",
+      "using": null,
+      "withCheck": "bucket_id = 'stall-images'\n    AND auth.role() = 'authenticated'"
+    },
+    {
+      "name": "users_own_update ON users\n  FOR UPDATE\n  USING (id = auth.uid())\n  WITH CHECK (\n    id = auth.uid()\n    -- get_user_role() reads the CURRENT stored role via a\n    -- SECURITY DEFINER function, avoiding recursive RLS evaluation.\n    -- The incoming NEW.role must match the stored role — preventing\n    -- any client from escalating their own role.\n    AND role = get_user_role()\n  );\n\nCOMMENT ON POLICY users_own_update ON users\n  IS 'Users may update their own profile. Role is immutable by the user — get_user_role() enforces the stored value. Only service_role may change roles.';\n\n\n-- ============================================================\n-- BLOCK-2: Remove Customer Payment Insertion Capability\n-- ============================================================\n\nDROP POLICY IF EXISTS payments_own_insert ON payment_records;\n\n-- No replacement INSERT policy is created.\n-- Payment records are written exclusively by server-side Edge\n-- Functions using the service_role key (which bypasses RLS).\n-- Customers have SELECT only on their own records.\n\nCOMMENT ON TABLE payment_records\n  IS 'Payment transaction ledger. INSERT is service_role only (via Edge Function after gateway verification). Customers: SELECT only.';\n\n\n-- ============================================================\n-- BLOCK-3: Automatic Order Number Generation\n-- ============================================================\n-- BUG-2 FIX: LPAD width changed from 4 to 6 ('RB-001001').\n--   LPAD('10000', 4, '0') = '10000' — does not truncate, but\n--   the 4-wide format becomes misleading at scale. 6 is safer.\n--\n-- BUG-3 FIX: Removed DEFAULT '' which risks UNIQUE constraint\n--   collisions if multiple rows default simultaneously (e.g.,\n--   COPY command, bulk insert). Replaced with a sequence-backed\n--   DEFAULT expression on the column itself so order_number is\n--   generated correctly even if the trigger is absent.\n--   The trigger still runs and remains the primary mechanism;\n--   the column DEFAULT is a reliable fallback.\n-- ============================================================\n\nCREATE SEQUENCE IF NOT EXISTS rollbowl_order_seq\n  START WITH 1001\n  INCREMENT BY 1\n  NO CYCLE;\n\n-- Column-level DEFAULT: sequence-backed, unique by construction.\n-- This is the fallback for any INSERT path that bypasses the trigger.\nALTER TABLE orders\n  ALTER COLUMN order_number\n    SET DEFAULT ('RB-' || LPAD(nextval('rollbowl_order_seq')::TEXT, 6, '0'));\n\n-- Trigger function: also uses the sequence, applied BEFORE INSERT.\n-- When a caller omits order_number, the trigger fires first and\n-- sets the value; the column DEFAULT is then not applied.\n-- When order_number IS already set by a caller, the trigger\n-- leaves it unchanged (preserving explicit values for seeding).\nCREATE OR REPLACE FUNCTION generate_order_number()\nRETURNS TRIGGER AS $$\nBEGIN\n  IF NEW.order_number IS NULL OR NEW.order_number = '' THEN\n    NEW.order_number := 'RB-' || LPAD(nextval('rollbowl_order_seq')::TEXT, 6, '0');\n  END IF;\n  RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\n\nDROP TRIGGER IF EXISTS orders_generate_number_trigger ON orders;\nCREATE TRIGGER orders_generate_number_trigger\n  BEFORE INSERT ON orders\n  FOR EACH ROW EXECUTE FUNCTION generate_order_number();\n\nCOMMENT ON SEQUENCE rollbowl_order_seq\n  IS 'Generates unique order number suffixes. Format: RB-001001, RB-001002, ...';\nCOMMENT ON COLUMN orders.order_number\n  IS 'Human-readable order number. Auto-generated by column DEFAULT and trigger. Format: RB-001001.';\n\n\n-- ============================================================\n-- BLOCK-4: Fix remaining_meals Derived Value\n-- ============================================================\n\nCREATE OR REPLACE FUNCTION sync_remaining_meals()\nRETURNS TRIGGER AS $$\nBEGIN\n  NEW.remaining_meals := NEW.total_meals - NEW.consumed_meals;\n  RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\n\n-- Fires on INSERT and on any UPDATE that touches total_meals\n-- or consumed_meals. Column-of-interest syntax avoids firing\n-- on irrelevant updates (e.g., status changes).\nDROP TRIGGER IF EXISTS subscriptions_sync_remaining_trigger ON subscriptions;\nCREATE TRIGGER subscriptions_sync_remaining_trigger\n  BEFORE INSERT OR UPDATE OF total_meals, consumed_meals ON subscriptions\n  FOR EACH ROW EXECUTE FUNCTION sync_remaining_meals();\n\nCOMMENT ON COLUMN subscriptions.remaining_meals\n  IS 'Recomputed by trigger on every write as (total_meals - consumed_meals). Do not set directly from the client.';\n\n\n-- ============================================================\n-- BLOCK-5: Atomic Inventory Reservation Function\n-- ============================================================\n-- BUG-4 FIX: Inside the UPDATE SET clause, column references\n--   on the right-hand side refer to the OLD row values, not\n--   the values being written in the same statement. The CASE\n--   expression for is_available must compare against the\n--   already-captured snapshot (v_inventory.available_quantity)\n--   minus p_quantity — not the live column name (which still\n--   holds the old value at evaluation time).\n--\n-- BUG-5 FIX: auth.uid() returns NULL inside SECURITY DEFINER\n--   functions because the function runs as its owner (postgres),\n--   not as the calling user's JWT session. The calling user's\n--   UUID must be passed explicitly as a parameter (p_user_id).\n--   The client must supply auth.uid() at the call site:\n--     SELECT * FROM reserve_meal_item(\n--       inventory_id,\n--       (SELECT auth.uid()),   -- or pass from application layer\n--       quantity,\n--       pickup_time\n--     );\n-- ============================================================\n\nCREATE OR REPLACE FUNCTION reserve_meal_item(\n  p_inventory_item_id  UUID,\n  p_user_id            UUID,       -- must be auth.uid() from caller\n  p_quantity           INTEGER,\n  p_pickup_time        TIMESTAMPTZ\n)\nRETURNS meal_reservations\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path = public\nAS $$\nDECLARE\n  v_inventory   inventory_items;\n  v_reservation meal_reservations;\n  v_post_qty    INTEGER;           -- available_quantity after deduction\nBEGIN\n  -- Guard: caller must supply their own user_id\n  IF p_user_id IS NULL THEN\n    RAISE EXCEPTION 'user_id is required'\n      USING ERRCODE = 'P0001';\n  END IF;\n\n  -- Guard: pickup time must be in the future\n  IF p_pickup_time <= now() THEN\n    RAISE EXCEPTION 'pickup_time must be in the future'\n      USING ERRCODE = 'P0001';\n  END IF;\n\n  -- Guard: per-reservation quantity limit\n  IF p_quantity < 1 OR p_quantity > 10 THEN\n    RAISE EXCEPTION 'invalid_quantity: must be 1–10, got %', p_quantity\n      USING ERRCODE = 'P0001';\n  END IF;\n\n  -- Step 1: Lock the inventory row for this transaction.\n  -- Concurrent callers on the same row will wait here until\n  -- this transaction commits or rolls back.\n  SELECT *\n    INTO v_inventory\n    FROM inventory_items\n   WHERE id = p_inventory_item_id\n     FOR UPDATE;\n\n  -- Step 2: Guard — row must exist\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'inventory_item_not_found: id=%', p_inventory_item_id\n      USING ERRCODE = 'P0002';\n  END IF;\n\n  -- Step 3: Guard — must have enough available stock\n  IF v_inventory.available_quantity < p_quantity THEN\n    RAISE EXCEPTION 'insufficient_stock: available=%, requested=%',\n      v_inventory.available_quantity, p_quantity\n      USING ERRCODE = 'P0001';\n  END IF;\n\n  -- Compute post-deduction quantity using snapshot variable.\n  -- BUG-4: Do NOT use 'available_quantity - p_quantity' inside\n  -- the UPDATE SET clause — that references the OLD column value\n  -- at evaluation time, not the value being written in line above.\n  v_post_qty := v_inventory.available_quantity - p_quantity;\n\n  -- Step 4: Atomically adjust inventory counts.\n  -- All expressions use the locked snapshot (v_inventory.*),\n  -- not live column references, to avoid stale-read confusion.\n  UPDATE inventory_items\n     SET reserved_quantity  = v_inventory.reserved_quantity + p_quantity,\n         available_quantity = v_post_qty,\n         -- Mark unavailable once stock hits zero\n         is_available       = CASE\n                                WHEN v_post_qty <= 0 THEN false\n                                ELSE v_inventory.is_available\n                              END\n   WHERE id = p_inventory_item_id;\n\n  -- Step 5: Create the reservation record.\n  -- p_user_id is the caller's auth.uid(), passed explicitly.\n  INSERT INTO meal_reservations (\n    user_id,\n    inventory_item_id,\n    meal_name,\n    stall_name,\n    quantity,\n    pickup_time,\n    status\n  )\n  VALUES (\n    p_user_id,\n    p_inventory_item_id,\n    v_inventory.meal_name,\n    (SELECT name FROM stalls WHERE id = v_inventory.stall_id),\n    p_quantity,\n    p_pickup_time,\n    'confirmed'\n  )\n  RETURNING * INTO v_reservation;\n\n  RETURN v_reservation;\nEND;\n$$;\n\n-- Restrict to authenticated role only (not anon)\nREVOKE ALL ON FUNCTION reserve_meal_item(UUID, UUID, INTEGER, TIMESTAMPTZ) FROM PUBLIC;\nGRANT EXECUTE ON FUNCTION reserve_meal_item(UUID, UUID, INTEGER, TIMESTAMPTZ) TO authenticated;\n\nCOMMENT ON FUNCTION reserve_meal_item(UUID, UUID, INTEGER, TIMESTAMPTZ)\n  IS 'Atomically reserves inventory and creates a meal_reservation row using row-level locking. p_user_id must be auth.uid() supplied by the caller (SECURITY DEFINER cannot call auth.uid() directly). Call as RPC.';\n\n\n-- ============================================================\n-- BLOCK-6: Enforce Payment Source Constraint\n-- ============================================================\n\nALTER TABLE payment_records\n  ADD CONSTRAINT payments_requires_source\n  CHECK (\n    (order_id IS NOT NULL AND subscription_id IS NULL)\n    OR\n    (order_id IS NULL AND subscription_id IS NOT NULL)\n  );\n\nCOMMENT ON CONSTRAINT payments_requires_source ON payment_records\n  IS 'Every payment record must reference exactly one source: either an order or a subscription — never neither, never both.';\n\n\n-- ============================================================\n-- BLOCK-7: Scope Operations Staff User Visibility to College\n-- ============================================================\n-- BUG-6 FIX: Enum comparisons use explicit ::user_role cast\n--   for clarity and to avoid relying on implicit unknown→enum\n--   casting, which is technically correct but brittle if enum\n--   names ever overlap with other types.\n-- ============================================================\n\nDROP POLICY IF EXISTS users_ops_select ON users;\n\n-- Helper: returns the college_id of the calling operator's stall.\n-- Returns NULL if the caller is not a stall operator or has no stall.\nCREATE OR REPLACE FUNCTION get_operator_college_id()\nRETURNS UUID AS $$\n  SELECT college_id\n    FROM public.stalls\n   WHERE operator_id = auth.uid()\n     AND is_active = true\n   LIMIT 1;\n$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;\n\n-- Stall operators: see only users whose college matches\n-- the operator's own active stall college.\nCREATE POLICY users_stall_operator_select ON users\n  FOR SELECT\n  USING (\n    get_user_role() = 'stall_operator'::user_role\n    AND college_id = get_operator_college_id()\n  );\n\n-- Kitchen staff: see users from colleges that have active stalls.\n-- Kitchen is campus-wide, so they need to see across their college\n-- but not globally across all cities.\nCREATE POLICY users_kitchen_select ON users\n  FOR SELECT\n  USING (\n    get_user_role() = 'kitchen'::user_role\n    AND college_id IN (\n      SELECT college_id FROM public.stalls WHERE is_active = true\n    )\n  );\n\nCOMMENT ON POLICY users_stall_operator_select ON users\n  IS 'Stall operators see only users from their own college. Cross-college user data is inaccessible.';\nCOMMENT ON POLICY users_kitchen_select ON users\n  IS 'Kitchen staff see users from colleges with active stalls only.';\n\n\n-- ============================================================\n-- BLOCK-8: Add Missing stall-images UPDATE and DELETE Policies\n-- ============================================================\n\nCREATE POLICY storage_stall_images_update ON storage.objects\n  FOR UPDATE\n  USING (\n    bucket_id = 'stall-images'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\nCREATE POLICY storage_stall_images_delete ON storage.objects\n  FOR DELETE\n  USING (\n    bucket_id = 'stall-images'\n    AND auth.uid()::text = (storage.foldername(name))[1]\n  );\n\n\n-- ============================================================\n-- BLOCK-9: Restrict Image Uploads to Operations Roles Only\n-- ============================================================\n-- BUG-6 FIX: get_user_role() returns user_role enum. Comparing\n--   with string literals in IN() relies on implicit cast. Made\n--   explicit with ::text cast on the function return value for\n--   maximum compatibility across Postgres versions.\n-- ============================================================\n\n-- ─── meal-images ────────────────────────────────────────────\n\nDROP POLICY IF EXISTS storage_meal_images_insert ON storage.objects;\n\nCREATE POLICY storage_meal_images_insert ON storage.objects\n  FOR INSERT\n  WITH CHECK (\n    bucket_id = 'meal-images'\n    AND get_user_role()::text IN ('kitchen', 'stall_operator')\n  );\n\n-- ─── stall-images ───────────────────────────────────────────\n\nDROP POLICY IF EXISTS storage_stall_images_insert ON storage.objects;\n\nCREATE POLICY storage_stall_images_insert",
+      "table": "storage",
+      "using": null,
+      "withCheck": "bucket_id = 'stall-images'\n    AND get_user_role()::text IN ('kitchen', 'stall_operator')"
+    },
+    {
+      "name": "menu_schedules_ops_all ON menu_schedules\n  FOR ALL USING (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  ) WITH CHECK (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  );\n\nCREATE POLICY menu_schedule_items_ops_all ON menu_schedule_items\n  FOR ALL USING (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  ) WITH CHECK (\n    get_user_role() IN ('kitchen', 'stall_operator')\n  );\n\n-- 2. Customers can only read published schedules\nCREATE POLICY menu_schedules_customer_select ON menu_schedules\n  FOR SELECT USING (\n    is_published = true\n  );\n\nCREATE POLICY menu_schedule_items_customer_select ON menu_schedule_items\n  FOR SELECT USING (\n    EXISTS (\n      SELECT 1 FROM menu_schedules\n      WHERE id = menu_schedule_items.menu_schedule_id\n        AND is_published = true\n    )\n  );\n\n-- ─── Indexes ─────────────────────────────────────────────────\n\nCREATE INDEX idx_menu_schedules_stall_date ON menu_schedules(stall_id, menu_date);\nCREATE INDEX idx_menu_schedule_items_schedule",
+      "table": "menu_schedule_items",
+      "using": null,
+      "withCheck": null
+    },
+    {
+      "name": "orders_kitchen_update",
+      "table": "orders",
+      "using": "get_user_role() = 'kitchen'",
+      "withCheck": "get_user_role() = 'kitchen'"
+    },
+    {
+      "name": "subscriptions_own_update ON subscriptions\n  FOR UPDATE USING (user_id = auth.uid())\n  WITH CHECK (user_id = auth.uid());\n\n\n-- ─── 2. Kitchen Holidays ────────────────────────────────────\n-- Created in Migration 020, but RLS was never enabled nor \n-- were read/write policies created.\n\nALTER TABLE kitchen_holidays ENABLE ROW LEVEL SECURITY;\n\n-- Anyone (Customers, Operators, Kitchen) can view active holidays\n-- to know when their subscriptions are paused.\nCREATE POLICY kitchen_holidays_read ON kitchen_holidays\n  FOR SELECT USING (true);\n\n-- Only kitchen staff can add, update, or remove holidays.\nCREATE POLICY kitchen_holidays_kitchen_all",
+      "table": "kitchen_holidays",
+      "using": "get_user_role() = 'kitchen'",
+      "withCheck": null
+    },
+    {
+      "name": "Enable read access for all users",
+      "table": "kitchen_holidays",
+      "using": "true",
+      "withCheck": null
+    },
+    {
+      "name": "Enable all access for kitchen staff",
+      "table": "kitchen_holidays",
+      "using": "EXISTS (\n      SELECT 1 FROM users\n      WHERE users.id = auth.uid()\n      AND users.role IN ('kitchen', 'stall_operator')\n    )",
+      "withCheck": null
+    },
+    {
+      "name": "Customers can view active batches",
+      "table": "inventory_batches",
+      "using": "status = 'active'",
+      "withCheck": null
+    },
+    {
+      "name": "Customers can view active batch items",
+      "table": "inventory_batch_items",
+      "using": "EXISTS (\n      SELECT 1 FROM inventory_batches\n      WHERE inventory_batches.id = inventory_batch_items.inventory_batch_id\n        AND inventory_batches.status = 'active'\n    )",
+      "withCheck": null
+    },
+    {
+      "name": "Operators can manage their batches",
+      "table": "inventory_batches",
+      "using": "is_stall_operator(stall_id)",
+      "withCheck": "is_stall_operator(stall_id)"
+    },
+    {
+      "name": "Operators can manage their batch items",
+      "table": "inventory_batch_items",
+      "using": "EXISTS (\n      SELECT 1 FROM inventory_batches\n      WHERE inventory_batches.id = inventory_batch_items.inventory_batch_id\n        AND is_stall_operator(inventory_batches.stall_id)\n    )",
+      "withCheck": "EXISTS (\n      SELECT 1 FROM inventory_batches\n      WHERE inventory_batches.id = inventory_batch_items.inventory_batch_id\n        AND is_stall_operator(inventory_batches.stall_id)\n    )"
+    },
+    {
+      "name": "Operators can manage their movements",
+      "table": "inventory_movements",
+      "using": "EXISTS (\n      SELECT 1 FROM inventory_batches\n      WHERE inventory_batches.id = inventory_movements.inventory_batch_id\n        AND is_stall_operator(inventory_batches.stall_id)\n    )",
+      "withCheck": "EXISTS (\n      SELECT 1 FROM inventory_batches\n      WHERE inventory_batches.id = inventory_movements.inventory_batch_id\n        AND is_stall_operator(inventory_batches.stall_id)\n    )"
+    },
+    {
+      "name": "Public read for active payment settings",
+      "table": "payment_settings",
+      "using": "is_active = true",
+      "withCheck": null
+    },
+    {
+      "name": "Operators manage their payment settings",
+      "table": "payment_settings",
+      "using": "is_stall_operator(stall_id)",
+      "withCheck": "is_stall_operator(stall_id)"
+    },
+    {
+      "name": "Customers can read own payment proofs",
+      "table": "payment_proofs",
+      "using": "user_id = auth.uid()",
+      "withCheck": null
+    },
+    {
+      "name": "Customers can read own subscription requests",
+      "table": "subscription_purchase_requests",
+      "using": "user_id = auth.uid()",
+      "withCheck": null
+    },
+    {
+      "name": "Operators can read proofs for their stall",
+      "table": "payment_proofs",
+      "using": "is_stall_operator(stall_id)",
+      "withCheck": null
+    },
+    {
+      "name": "Operators can read subscription requests for their stall",
+      "table": "subscription_purchase_requests",
+      "using": "is_stall_operator(stall_id)",
+      "withCheck": null
+    },
+    {
+      "name": "Users can upload their own proofs",
+      "table": "storage",
+      "using": null,
+      "withCheck": "bucket_id = 'payment-proofs' AND \n  (auth.uid())::text = (string_to_array(name, '/'))[2]"
+    },
+    {
+      "name": "Users can read their own proofs",
+      "table": "storage",
+      "using": "bucket_id = 'payment-proofs' AND \n  (auth.uid())::text = (string_to_array(name, '/'))[2]",
+      "withCheck": null
+    },
+    {
+      "name": "Operators can read proofs for their stall",
+      "table": "storage",
+      "using": "bucket_id = 'payment-proofs' AND \n  EXISTS (\n    SELECT 1 FROM public.payment_proofs p\n    WHERE p.screenshot_path = storage.objects.name\n    AND public.is_stall_operator(p.stall_id)\n  )",
+      "withCheck": null
+    },
+    {
+      "name": "sub_credit_res_read ON public.subscription_credit_reservations\r\n  FOR SELECT TO authenticated\r\n  USING (\r\n    user_id = auth.uid()\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.stalls\r\n      WHERE id = (SELECT stall_id FROM public.orders WHERE id = subscription_credit_reservations.order_id)\r\n        AND operator_id = auth.uid()\r\n    )\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.users\r\n      WHERE id = auth.uid() AND role IN ('kitchen', 'stall_operator')\r\n    )\r\n  );\r\n\r\n-- ─── 3. HISTORICAL ORDER BACKFILL WITH FIXED CUTOFF TIMESTAMP ──────────────────\r\n-- We capture clock_timestamp() once so all legacy order classifications use the exact same cutoff.\r\n-- Non-cancelled legacy subscription orders are backfilled as 'consumed'.\r\n-- Cancelled legacy subscription orders are backfilled as 'legacy_released_unverified' (legacy_state_verified = false).\r\n-- Historical subscription balances are NEVER modified.\r\nDO $$\r\nDECLARE\r\n  v_migration_cutoff TIMESTAMPTZ := clock_timestamp();\r\nBEGIN\r\n  INSERT INTO public.subscription_credit_reservations (\r\n    order_id,\r\n    subscription_id,\r\n    user_id,\r\n    service_date,\r\n    credits,\r\n    status,\r\n    reserved_at,\r\n    consumed_at,\r\n    released_at,\r\n    release_reason,\r\n    legacy_backfill,\r\n    legacy_state_verified\r\n  )\r\n  SELECT \r\n    o.id,\r\n    oi.subscription_id,\r\n    o.user_id,\r\n    COALESCE(o.pickup_date, o.created_at::DATE),\r\n    SUM(oi.credits_used)::INTEGER,\r\n    CASE \r\n      WHEN o.status = 'cancelled' THEN 'legacy_released_unverified'\r\n      ELSE 'consumed'\r\n    END AS status,\r\n    o.created_at,\r\n    CASE WHEN o.status != 'cancelled' THEN o.created_at ELSE NULL END,\r\n    CASE WHEN o.status = 'cancelled' THEN o.updated_at ELSE NULL END,\r\n    CASE WHEN o.status = 'cancelled' THEN 'Historical cancelled order before Migration 050 (unverified legacy refund)' ELSE NULL END,\r\n    true AS legacy_backfill,\r\n    CASE WHEN o.status = 'cancelled' THEN false ELSE true END AS legacy_state_verified\r\n  FROM public.orders o\r\n  JOIN public.order_items oi ON oi.order_id = o.id\r\n  WHERE oi.subscription_id IS NOT NULL \r\n    AND oi.credits_used > 0\r\n    AND o.created_at < v_migration_cutoff\r\n  GROUP BY o.id, o.order_number, o.status, o.created_at, o.updated_at, o.pickup_date, o.user_id, oi.subscription_id\r\n  ON CONFLICT (order_id) DO NOTHING;\r\nEND;\r\n$$;\r\n\r\n-- ─── 4. REFACTOR place_order WITH CAPACITY RESERVATION ─────────────────────────\r\nCREATE OR REPLACE FUNCTION public.place_order(p_payload JSONB)\r\nRETURNS JSONB\r\nLANGUAGE plpgsql\r\nSECURITY DEFINER\r\nSET search_path = public\r\nAS $$\r\nDECLARE\r\n  v_user_id UUID;\r\n  v_user_record RECORD;\r\n  v_stall_record RECORD;\r\n  v_items JSONB;\r\n  \r\n  v_pickup_date DATE;\r\n  v_expected_pickup_slot TEXT;\r\n  v_parsed_slot_start TIME;\r\n  v_parsed_slot_end TIME;\r\n  \r\n  v_payment_method TEXT;\r\n  v_notes TEXT;\r\n  v_subtotal NUMERIC(10,2) := 0;\r\n  v_tax NUMERIC(10,2) := 0;\r\n  v_total NUMERIC(10,2) := 0;\r\n  \r\n  v_item JSONB;\r\n  v_meal_uuid UUID;\r\n  v_qty INTEGER;\r\n  v_sub_qty INTEGER;\r\n  v_paid_qty INTEGER;\r\n  \r\n  v_order_id UUID;\r\n  v_order_number TEXT;\r\n  \r\n  v_order_type order_type;\r\n  v_payment_status payment_status;\r\n  v_payment_verification_status TEXT;\r\n  v_final_payment_method payment_method_type;\r\n  v_payment_proof_deadline TIMESTAMPTZ;\r\n  \r\n  v_client_sub_id UUID;\r\n  v_sub RECORD;\r\n  v_credits_to_consume INTEGER := 0;\r\n  v_effective_daily_credits INTEGER := 0;\r\n  v_reserved_total INTEGER := 0;\r\n  v_reserved_today INTEGER := 0;\r\n  v_available_total INTEGER := 0;\r\n  v_available_daily INTEGER := 0;\r\n  v_credit_cost INTEGER;\r\n  v_credit_cost_numeric NUMERIC;\r\n  \r\n  v_resolved_batch_id UUID;\r\n  v_batch_item RECORD;\r\n  v_state RECORD;\r\n  \r\n  v_trusted_items JSONB := '[]'::JSONB;\r\n  v_final_items JSONB := '[]'::JSONB;\r\n  \r\n  v_cutoff TIMESTAMPTZ;\r\n  v_now_ist TIMESTAMPTZ;\r\nBEGIN\r\n  -- 1. AUTHENTICATION & USER VALIDATION\r\n  v_user_id := auth.uid();\r\n  IF v_user_id IS NULL THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'UNAUTHORIZED', 'message', 'Not authorized')::text;\r\n  END IF;\r\n\r\n  SELECT id, name, phone INTO v_user_record\r\n  FROM public.users WHERE id = v_user_id;\r\n\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'USER_NOT_FOUND', 'message', 'User profile not found')::text;\r\n  END IF;\r\n\r\n  IF v_user_record.phone IS NULL OR trim(v_user_record.phone) = '' THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'PHONE_REQUIRED', 'message', 'Phone number required')::text;\r\n  END IF;\r\n\r\n  -- 2. STALL VALIDATION\r\n  IF (p_payload->>'stallId') IS NULL THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_PAYLOAD', 'message', 'stallId is required')::text;\r\n  END IF;\r\n\r\n  SELECT id, name, is_active INTO v_stall_record\r\n  FROM public.stalls\r\n  WHERE id = (p_payload->>'stallId')::UUID;\r\n\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'STALL_NOT_FOUND', 'message', 'Stall not found')::text;\r\n  END IF;\r\n\r\n  IF NOT v_stall_record.is_active THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'STALL_INACTIVE', 'message', 'Stall is currently inactive')::text;\r\n  END IF;\r\n\r\n  -- 3. CUTOFF TIME & PICKUP DATE VALIDATION\r\n  IF (p_payload->>'pickupDate') IS NULL THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_PAYLOAD', 'message', 'pickupDate is required')::text;\r\n  END IF;\r\n\r\n  v_pickup_date := (p_payload->>'pickupDate')::DATE;\r\n  v_now_ist := now() AT TIME ZONE 'Asia/Kolkata';\r\n\r\n  IF v_pickup_date < v_now_ist::DATE THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'PAST_PICKUP_DATE', 'message', 'Cannot order for a past date')::text;\r\n  END IF;\r\n\r\n  IF v_pickup_date = v_now_ist::DATE THEN\r\n    SELECT order_cutoff INTO v_cutoff\r\n    FROM public.menu_schedules\r\n    WHERE stall_id = (p_payload->>'stallId')::UUID\r\n      AND menu_date = v_pickup_date\r\n      AND is_published = true\r\n    LIMIT 1;\r\n\r\n    IF v_cutoff IS NOT NULL AND now() >= v_cutoff THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'CUTOFF_PASSED', 'message', 'Order cutoff time for today has passed')::text;\r\n    END IF;\r\n  END IF;\r\n\r\n  v_expected_pickup_slot := trim(COALESCE(p_payload->>'expectedPickupSlot', '13:00 - 13:30'));\r\n  BEGIN\r\n    v_parsed_slot_start := split_part(v_expected_pickup_slot, ' - ', 1)::TIME;\r\n    v_parsed_slot_end   := split_part(v_expected_pickup_slot, ' - ', 2)::TIME;\r\n    IF v_parsed_slot_start >= v_parsed_slot_end THEN\r\n      RAISE EXCEPTION 'Invalid slot window';\r\n    END IF;\r\n  EXCEPTION WHEN OTHERS THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_PICKUP_SLOT', 'message', 'Expected pickup slot must be in HH:MI - HH:MI format.')::text;\r\n  END;\r\n\r\n  v_payment_method := COALESCE(p_payload->>'paymentMethod', 'upi');\r\n  v_notes := p_payload->>'notes';\r\n  v_items := p_payload->'items';\r\n\r\n  IF v_items IS NULL OR jsonb_array_length(v_items) = 0 THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'EMPTY_ORDER', 'message', 'Order items cannot be empty')::text;\r\n  END IF;\r\n\r\n  -- 4. INVENTORY BATCH & SUBSCRIPTION RESOLUTION (LOCK FOR UPDATE)\r\n  SELECT id INTO v_resolved_batch_id\r\n  FROM inventory_batches\r\n  WHERE stall_id = v_stall_record.id\r\n    AND inventory_date = v_pickup_date\r\n    AND status = 'active'\r\n  LIMIT 1;\r\n\r\n  IF (p_payload->>'subscriptionId') IS NOT NULL AND trim(p_payload->>'subscriptionId') != '' THEN\r\n    v_client_sub_id := (p_payload->>'subscriptionId')::UUID;\r\n  END IF;\r\n\r\n  IF v_client_sub_id IS NOT NULL THEN\r\n    SELECT s.*\r\n    INTO v_sub\r\n    FROM public.subscriptions s\r\n    WHERE s.id = v_client_sub_id AND s.user_id = v_user_id\r\n    FOR UPDATE;\r\n\r\n    IF NOT FOUND THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_SUBSCRIPTION', 'message', 'Subscription not found or unauthorized.')::text;\r\n    END IF;\r\n\r\n    IF v_sub.status != 'active' THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_SUBSCRIPTION', 'message', 'Subscription is not active.')::text;\r\n    END IF;\r\n    \r\n    IF v_pickup_date < v_sub.start_date OR v_pickup_date > v_sub.end_date THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_SUBSCRIPTION', 'message', 'Subscription is not valid for the selected pickup date.')::text;\r\n    END IF;\r\n\r\n    IF COALESCE(v_sub.last_usage_date, '1970-01-01'::DATE) = v_pickup_date THEN\r\n      v_effective_daily_credits := COALESCE(v_sub.daily_credits_used, 0);\r\n    ELSE\r\n      v_effective_daily_credits := 0;\r\n    END IF;\r\n\r\n    -- Calculate active pending reservations for this subscription\r\n    SELECT COALESCE(SUM(credits), 0) INTO v_reserved_total\r\n    FROM public.subscription_credit_reservations\r\n    WHERE subscription_id = v_sub.id\r\n      AND status = 'reserved';\r\n\r\n    SELECT COALESCE(SUM(credits), 0) INTO v_reserved_today\r\n    FROM public.subscription_credit_reservations\r\n    WHERE subscription_id = v_sub.id\r\n      AND status = 'reserved'\r\n      AND service_date = v_pickup_date;\r\n  END IF;\r\n\r\n  -- 5. VALIDATE INVENTORY & BUILD FINAL DATASET\r\n  FOR v_item IN SELECT value FROM jsonb_array_elements(p_payload->'items')\r\n  LOOP\r\n    v_meal_uuid := COALESCE(v_item->>'mealId', v_item->>'meal_id')::UUID;\r\n    v_qty := COALESCE(v_item->>'quantity', v_item->>'qty')::INTEGER;\r\n    v_sub_qty := CASE\r\n      WHEN (v_item->>'subscriptionQuantity') IS NOT NULL THEN (v_item->>'subscriptionQuantity')::INTEGER\r\n      WHEN (v_item->>'sub_qty') IS NOT NULL THEN (v_item->>'sub_qty')::INTEGER\r\n      WHEN COALESCE((v_item->>'isSubscriptionItem')::BOOLEAN, false) = true OR COALESCE((v_item->>'useSubscription')::BOOLEAN, false) = true THEN v_qty\r\n      ELSE 0\r\n    END;\r\n    \r\n    IF v_qty <= 0 THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_QUANTITY', 'message', 'Quantity must be positive')::text;\r\n    END IF;\r\n    \r\n    IF v_sub_qty < 0 OR v_sub_qty > v_qty THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_SUBSCRIPTION_QUANTITY', 'message', 'Subscription quantity invalid')::text;\r\n    END IF;\r\n\r\n    v_paid_qty := v_qty - v_sub_qty;\r\n    \r\n    DECLARE\r\n      v_db_meal RECORD;\r\n    BEGIN\r\n      SELECT id, name, price, is_available, category INTO v_db_meal\r\n      FROM meals\r\n      WHERE id = v_meal_uuid AND stall_id = v_stall_record.id;\r\n      \r\n      IF NOT FOUND THEN\r\n        RAISE EXCEPTION '%', jsonb_build_object('code', 'MEAL_NOT_FOUND', 'message', 'Meal not found or does not belong to stall')::text;\r\n      END IF;\r\n\r\n      v_trusted_items := v_trusted_items || jsonb_build_object(\r\n        'meal_id', v_db_meal.id,\r\n        'meal_name', v_db_meal.name,\r\n        'price', v_db_meal.price,\r\n        'is_available', v_db_meal.is_available,\r\n        'category', v_db_meal.category,\r\n        'qty', v_qty,\r\n        'sub_qty', v_sub_qty,\r\n        'paid_qty', v_paid_qty\r\n      );\r\n    END;\r\n  END LOOP;\r\n\r\n  FOR v_item IN SELECT value FROM jsonb_array_elements(v_trusted_items)\r\n  LOOP\r\n    v_meal_uuid := (v_item->>'meal_id')::UUID;\r\n    v_qty       := (v_item->>'qty')::INTEGER;\r\n    v_sub_qty   := (v_item->>'sub_qty')::INTEGER;\r\n    v_paid_qty  := (v_item->>'paid_qty')::INTEGER;\r\n    \r\n    IF NOT COALESCE((v_item->>'is_available')::BOOLEAN, false) THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'MEAL_NOT_AVAILABLE', 'message', 'Meal is currently unavailable.', 'meal_name', v_item->>'meal_name')::text;\r\n    END IF;\r\n\r\n    IF v_resolved_batch_id IS NOT NULL THEN\r\n      SELECT * INTO v_batch_item FROM inventory_batch_items WHERE inventory_batch_id = v_resolved_batch_id AND meal_id = v_meal_uuid FOR UPDATE;\r\n      IF NOT FOUND THEN\r\n        RAISE EXCEPTION '%', jsonb_build_object('code', 'ITEM_NOT_IN_BATCH', 'message', 'Meal is not available in today''s batch.', 'meal_name', v_item->>'meal_name', 'meal_id', v_meal_uuid)::text;\r\n      END IF;\r\n\r\n      SELECT * INTO v_state FROM live_inventory_status WHERE inventory_batch_item_id = v_batch_item.id;\r\n      IF v_state.extra_available < v_qty THEN\r\n        RAISE EXCEPTION '%', jsonb_build_object('code', 'INSUFFICIENT_STOCK', 'message', 'Insufficient stock.', 'meal_name', v_item->>'meal_name', 'requested_quantity', v_qty, 'available_quantity', GREATEST(v_state.extra_available, 0))::text;\r\n      END IF;\r\n    END IF;\r\n\r\n    v_credit_cost := 0;\r\n    IF v_sub_qty > 0 THEN\r\n      IF v_client_sub_id IS NULL THEN\r\n        RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_PAYLOAD', 'message', 'Subscription quantity requested but no subscriptionId provided.')::text;\r\n      END IF;\r\n      \r\n      IF jsonb_typeof(v_sub.category_credit_costs) != 'object' THEN\r\n        RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_PLAN_CONFIG_INVALID', 'message', 'Subscription plan configuration is invalid.')::text;\r\n      END IF;\r\n      \r\n      IF NOT (v_sub.category_credit_costs ? (v_item->>'category')) THEN\r\n         RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_ITEM_NOT_ELIGIBLE', 'message', 'Meal category is not eligible for subscription.', 'category', v_item->>'category')::text;\r\n      END IF;\r\n\r\n      v_credit_cost_numeric := (v_sub.category_credit_costs->>(v_item->>'category'))::NUMERIC;\r\n      IF v_credit_cost_numeric % 1 != 0 OR v_credit_cost_numeric <= 0 OR v_credit_cost_numeric > 10000 THEN\r\n         RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_PLAN_CONFIG_INVALID', 'message', 'Credit cost must be a positive integer.')::text;\r\n      END IF;\r\n      \r\n      v_credit_cost := v_credit_cost_numeric::INTEGER;\r\n      v_credits_to_consume := v_credits_to_consume + (v_credit_cost * v_sub_qty);\r\n    END IF;\r\n\r\n    v_subtotal := v_subtotal + ((v_item->>'price')::NUMERIC * v_paid_qty);\r\n    \r\n    v_final_items := v_final_items || jsonb_build_object(\r\n      'meal_id', v_meal_uuid,\r\n      'meal_name', v_item->>'meal_name',\r\n      'price', (v_item->>'price')::NUMERIC,\r\n      'paid_qty', v_paid_qty,\r\n      'sub_qty', v_sub_qty,\r\n      'credit_cost', v_credit_cost\r\n    );\r\n  END LOOP;\r\n\r\n  -- 6. VALIDATE AVAILABLE TOTAL & DAILY CREDITS (RESERVATIONS ARE AUDITED BUT NOT YET CONSUMED)\r\n  IF v_credits_to_consume > 0 THEN\r\n    v_available_total := COALESCE(v_sub.remaining_meals, 0) - v_reserved_total;\r\n    IF v_available_total < v_credits_to_consume THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object(\r\n        'code', 'INSUFFICIENT_CREDITS',\r\n        'message', 'Insufficient subscription credits available (including pending reservations).',\r\n        'required', v_credits_to_consume,\r\n        'remaining', v_sub.remaining_meals,\r\n        'reserved', v_reserved_total,\r\n        'available', v_available_total\r\n      )::text;\r\n    END IF;\r\n\r\n    v_available_daily := COALESCE(v_sub.meals_per_day, 0) - v_effective_daily_credits - v_reserved_today;\r\n    IF v_available_daily < v_credits_to_consume THEN\r\n       RAISE EXCEPTION '%', jsonb_build_object(\r\n         'code', 'DAILY_CREDIT_LIMIT_EXCEEDED',\r\n         'message', 'Exceeds daily subscription credit limit (including pending reservations).',\r\n         'required', v_credits_to_consume,\r\n         'remaining_today', GREATEST(0, v_available_daily)\r\n       )::text;\r\n    END IF;\r\n  END IF;\r\n\r\n  -- 7. TAX & PAYMENT RESOLUTION\r\n  v_tax := ROUND(v_subtotal * 0.05, 0);\r\n  v_total := GREATEST(v_subtotal + v_tax, 0);\r\n\r\n  IF v_client_sub_id IS NOT NULL AND v_credits_to_consume > 0 THEN\r\n    v_order_type := 'subscription'::order_type;\r\n  ELSIF v_resolved_batch_id IS NOT NULL THEN\r\n    v_order_type := 'on_stall'::order_type;\r\n  ELSE\r\n    v_order_type := 'pre_order'::order_type;\r\n  END IF;\r\n\r\n  IF v_subtotal = 0 AND v_credits_to_consume > 0 THEN\r\n    v_final_payment_method := 'subscription'::payment_method_type;\r\n    v_payment_status := 'paid'::payment_status;\r\n    v_payment_verification_status := 'not_required';\r\n    v_payment_proof_deadline := NULL;\r\n  ELSE\r\n    IF v_payment_method NOT IN ('upi', 'cash') THEN\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'INVALID_PAYMENT_METHOD', 'message', 'Unsupported payment method. Only cash and upi are supported.')::text;\r\n    END IF;\r\n    v_final_payment_method := v_payment_method::payment_method_type;\r\n    v_payment_status := 'pending'::payment_status;\r\n\r\n    IF v_final_payment_method = 'upi' THEN\r\n      v_payment_verification_status := 'awaiting_proof';\r\n      v_payment_proof_deadline := now() + interval '15 minutes';\r\n    ELSE\r\n      v_payment_verification_status := 'not_required';\r\n      v_payment_proof_deadline := NULL;\r\n    END IF;\r\n  END IF;\r\n\r\n  -- 8. CREATE ORDER\r\n  INSERT INTO orders (\r\n    user_id, customer_name, stall_id, stall_name,\r\n    status, order_type, payment_status, payment_method,\r\n    subtotal, tax, discount, total, notes,\r\n    pickup_date, expected_pickup_slot,\r\n    payment_verification_status, payment_proof_deadline\r\n  ) VALUES (\r\n    v_user_id, v_user_record.name, v_stall_record.id, v_stall_record.name,\r\n    'pending', v_order_type, v_payment_status, v_final_payment_method,\r\n    v_subtotal, v_tax, 0, v_total, v_notes,\r\n    v_pickup_date, v_expected_pickup_slot,\r\n    v_payment_verification_status, v_payment_proof_deadline\r\n  ) RETURNING id, order_number INTO v_order_id, v_order_number;\r\n\r\n  -- 9. CREATE ORDER ITEMS\r\n  FOR v_item IN SELECT value FROM jsonb_array_elements(v_final_items)\r\n  LOOP\r\n    v_meal_uuid := (v_item->>'meal_id')::UUID;\r\n    v_paid_qty  := (v_item->>'paid_qty')::INTEGER;\r\n    v_sub_qty   := (v_item->>'sub_qty')::INTEGER;\r\n    v_credit_cost := (v_item->>'credit_cost')::INTEGER;\r\n    \r\n    IF v_paid_qty > 0 THEN\r\n      INSERT INTO order_items (\r\n        order_id, meal_id, meal_name, quantity,\r\n        unit_price, total_price,\r\n        subscription_id, credits_used\r\n      ) VALUES (\r\n        v_order_id, v_meal_uuid, v_item->>'meal_name', v_paid_qty,\r\n        (v_item->>'price')::NUMERIC, (v_item->>'price')::NUMERIC * v_paid_qty,\r\n        NULL, 0\r\n      );\r\n    END IF;\r\n    \r\n    IF v_sub_qty > 0 THEN\r\n      INSERT INTO order_items (\r\n        order_id, meal_id, meal_name, quantity,\r\n        unit_price, total_price,\r\n        subscription_id, credits_used\r\n      ) VALUES (\r\n        v_order_id, v_meal_uuid, v_item->>'meal_name', v_sub_qty,\r\n        (v_item->>'price')::NUMERIC, 0,\r\n        v_client_sub_id, v_sub_qty * v_credit_cost\r\n      );\r\n    END IF;\r\n  END LOOP;\r\n\r\n  -- 10. CREATE DURABLE 'reserved' LEDGER ENTRY (WITHOUT MUTATING SUBSCRIPTION BALANCES)\r\n  IF v_credits_to_consume > 0 THEN\r\n    INSERT INTO public.subscription_credit_reservations (\r\n      order_id, subscription_id, user_id, service_date, credits, status, reserved_at\r\n    ) VALUES (\r\n      v_order_id, v_client_sub_id, v_user_id, v_pickup_date, v_credits_to_consume, 'reserved', now()\r\n    );\r\n  END IF;\r\n\r\n  RETURN jsonb_build_object(\r\n    'success', true,\r\n    'order_id', v_order_id,\r\n    'order_number', v_order_number,\r\n    'subtotal', v_subtotal,\r\n    'tax', v_tax,\r\n    'discount', 0.00,\r\n    'total', v_total,\r\n    'order_type', v_order_type,\r\n    'payment_status', v_payment_status,\r\n    'payment_verification_status', v_payment_verification_status,\r\n    'payment_proof_deadline', v_payment_proof_deadline\r\n  );\r\nEND;\r\n$$;\r\n\r\n-- ─── 5. AUTHORITATIVE KITCHEN ACCEPTANCE (accept_order) ────────────────────────\r\n-- Verifies capacity without double counting:\r\n-- effectiveDailyUsed + reservation.credits <= subscription.meals_per_day\r\nCREATE OR REPLACE FUNCTION public.accept_order(\r\n  p_order_id UUID\r\n) RETURNS JSONB\r\nLANGUAGE plpgsql\r\nSECURITY DEFINER\r\nSET search_path = public\r\nAS $$\r\nDECLARE\r\n  v_order RECORD;\r\n  v_res RECORD;\r\n  v_sub RECORD;\r\n  v_effective_daily_used INTEGER := 0;\r\n  v_total_credits_for_order INTEGER := 0;\r\nBEGIN\r\n  -- 1. Authentication Check\r\n  IF auth.uid() IS NULL THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'UNAUTHORIZED', 'message', 'Not authorized.')::text;\r\n  END IF;\r\n\r\n  -- 2. Lock Order row FOR UPDATE\r\n  SELECT * INTO v_order FROM public.orders WHERE id = p_order_id FOR UPDATE;\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'ORDER_NOT_FOUND', 'message', 'Order not found.')::text;\r\n  END IF;\r\n\r\n  -- 3. Check operator permissions / stall ownership\r\n  IF NOT EXISTS (\r\n    SELECT 1 FROM public.stalls WHERE id = v_order.stall_id AND (operator_id = auth.uid() OR auth.role() = 'service_role')\r\n  ) AND NOT EXISTS (\r\n    SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('kitchen', 'stall_operator')\r\n  ) THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'UNAUTHORIZED_STALL_OPERATOR', 'message', 'Operator does not have permission for this stall.')::text;\r\n  END IF;\r\n\r\n  -- 4. Lock reservation FOR UPDATE\r\n  SELECT * INTO v_res\r\n  FROM public.subscription_credit_reservations\r\n  WHERE order_id = v_order.id\r\n  FOR UPDATE;\r\n\r\n  IF NOT FOUND THEN\r\n    -- If order has no subscription items, simply accept canonical status\r\n    SELECT COALESCE(SUM(credits_used)::INTEGER, 0) INTO v_total_credits_for_order\r\n    FROM public.order_items WHERE order_id = v_order.id AND subscription_id IS NOT NULL;\r\n\r\n    IF v_total_credits_for_order = 0 THEN\r\n      UPDATE public.orders SET status = 'confirmed' WHERE id = v_order.id RETURNING * INTO v_order;\r\n      RETURN jsonb_build_object('success', true, 'order_id', v_order.id, 'status', v_order.status, 'already_accepted', false);\r\n    ELSE\r\n      RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_RESERVATION_MISSING', 'message', 'Subscription reservation row missing for subscription order.')::text;\r\n    END IF;\r\n  END IF;\r\n\r\n  -- 5. Idempotency Check: if reservation is already consumed, return success without double deducting\r\n  IF v_res.status = 'consumed' THEN\r\n    RETURN jsonb_build_object(\r\n      'success', true,\r\n      'order_id', v_order.id,\r\n      'status', v_order.status,\r\n      'already_accepted', true,\r\n      'reservation_status', v_res.status\r\n    );\r\n  END IF;\r\n\r\n  -- 6. If reservation is not 'reserved', raise structured error\r\n  IF v_res.status != 'reserved' THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object(\r\n      'code', 'INVALID_RESERVATION_STATUS',\r\n      'message', 'Subscription credit reservation is not in reserved status.',\r\n      'order_id', v_order.id,\r\n      'reservation_status', v_res.status\r\n    )::text;\r\n  END IF;\r\n\r\n  -- 7. Lock subscription FOR UPDATE\r\n  SELECT * INTO v_sub FROM public.subscriptions WHERE id = v_res.subscription_id FOR UPDATE;\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_NOT_FOUND', 'message', 'Subscription record not found.')::text;\r\n  END IF;\r\n\r\n  -- Validate reservation integrity against order and subscription\r\n  IF v_res.order_id != v_order.id OR v_res.user_id != v_order.user_id THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'RESERVATION_INTEGRITY_MISMATCH', 'message', 'Reservation metadata does not match order.')::text;\r\n  END IF;\r\n\r\n  IF v_sub.status != 'active' THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_NOT_ACTIVE', 'message', 'Customer subscription is not active.', 'status', v_sub.status)::text;\r\n  END IF;\r\n\r\n  IF v_res.service_date < v_sub.start_date OR v_res.service_date > v_sub.end_date THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'SUBSCRIPTION_DATE_INVALID', 'message', 'Order service date falls outside subscription validity duration.')::text;\r\n  END IF;\r\n\r\n  IF COALESCE(v_sub.remaining_meals, 0) < v_res.credits THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object('code', 'INSUFFICIENT_SUBSCRIPTION_CREDITS', 'message', 'Insufficient subscription credits remaining.', 'required', v_res.credits, 'remaining', v_sub.remaining_meals)::text;\r\n  END IF;\r\n\r\n  -- 8. Acceptance Daily Limit Calculation WITHOUT double counting:\r\n  -- We check ONLY effectiveDailyUsed + reservation.credits <= subscription.meals_per_day\r\n  IF v_sub.last_usage_date = v_res.service_date THEN\r\n    v_effective_daily_used := COALESCE(v_sub.daily_credits_used, 0);\r\n  ELSE\r\n    v_effective_daily_used := 0;\r\n  END IF;\r\n\r\n  IF (v_effective_daily_used + v_res.credits) > COALESCE(v_sub.meals_per_day, 0) THEN\r\n    RAISE EXCEPTION '%', jsonb_build_object(\r\n      'code', 'DAILY_CREDIT_LIMIT_EXCEEDED',\r\n      'message', 'Order exceeds daily subscription credit limit at acceptance.',\r\n      'required', v_res.credits,\r\n      'remaining_today', GREATEST(0, COALESCE(v_sub.meals_per_day, 0) - v_effective_daily_used)\r\n    )::text;\r\n  END IF;\r\n\r\n  -- 9. Permanently consume credits on subscription\r\n  UPDATE public.subscriptions\r\n  SET consumed_meals = COALESCE(consumed_meals, 0) + v_res.credits,\r\n      remaining_meals = remaining_meals - v_res.credits,\r\n      daily_credits_used = v_effective_daily_used + v_res.credits,\r\n      last_usage_date = v_res.service_date\r\n  WHERE id = v_sub.id;\r\n\r\n  -- 10. Update reservation status to 'consumed'\r\n  UPDATE public.subscription_credit_reservations\r\n  SET status = 'consumed',\r\n      consumed_at = now()\r\n  WHERE id = v_res.id;\r\n\r\n  -- 11. Update order status to canonical accepted status ('confirmed')\r\n  UPDATE public.orders\r\n  SET status = 'confirmed'\r\n  WHERE id = v_order.id\r\n  RETURNING * INTO v_order;\r\n\r\n  RETURN jsonb_build_object(\r\n    'success', true,\r\n    'order_id', v_order.id,\r\n    'status', v_order.status,\r\n    'already_accepted', false,\r\n    'reservation_status', 'consumed'\r\n  );\r\nEND;\r\n$$;\r\n\r\nREVOKE ALL ON FUNCTION public.accept_order(UUID) FROM PUBLIC;\r\nREVOKE ALL ON FUNCTION public.accept_order(UUID) FROM anon;\r\nGRANT EXECUTE ON FUNCTION public.accept_order(UUID) TO authenticated;\r\nGRANT EXECUTE ON FUNCTION public.accept_order(UUID) TO service_role;\r\n\r\n-- ─── 6. COMPREHENSIVE RELEASE PATH FUNCTION ────────────────────────────────────\r\n-- Idempotently moves 'reserved' -> 'released' without mutating subscription balances.\r\n-- Refuses automatic release if status is 'consumed' (requires explicit reversal workflow).\r\nCREATE OR REPLACE FUNCTION public.release_subscription_reservation(\r\n  p_order_id UUID,\r\n  p_reason TEXT DEFAULT 'Order cancelled or expired before acceptance'\r\n) RETURNS BOOLEAN\r\nLANGUAGE plpgsql\r\nSECURITY DEFINER\r\nSET search_path = public\r\nAS $$\r\nDECLARE\r\n  v_res RECORD;\r\nBEGIN\r\n  SELECT * INTO v_res\r\n  FROM public.subscription_credit_reservations\r\n  WHERE order_id = p_order_id\r\n  FOR UPDATE;\r\n\r\n  IF NOT FOUND THEN\r\n    RETURN false;\r\n  END IF;\r\n\r\n  IF v_res.status = 'reserved' THEN\r\n    UPDATE public.subscription_credit_reservations\r\n    SET status = 'released',\r\n        released_at = now(),\r\n        release_reason = p_reason\r\n    WHERE id = v_res.id;\r\n    RETURN true;\r\n  ELSIF v_res.status IN ('released', 'legacy_released_unverified') THEN\r\n    -- Idempotent return for already released reservations\r\n    RETURN true;\r\n  ELSIF v_res.status = 'consumed' THEN\r\n    -- Refuse automatic release; accepted orders require explicit ledger reversal\r\n    RAISE EXCEPTION '%', jsonb_build_object(\r\n      'code', 'CANNOT_RELEASE_CONSUMED_RESERVATION',\r\n      'message', 'Cannot automatically release a consumed reservation. Requires explicit reversal workflow.',\r\n      'order_id', p_order_id\r\n    )::text;\r\n  END IF;\r\n\r\n  RETURN false;\r\nEND;\r\n$$;\r\n\r\nREVOKE ALL ON FUNCTION public.release_subscription_reservation(UUID, TEXT) FROM PUBLIC;\r\nREVOKE ALL ON FUNCTION public.release_subscription_reservation(UUID, TEXT) FROM anon;\r\nGRANT EXECUTE ON FUNCTION public.release_subscription_reservation(UUID, TEXT) TO authenticated;\r\nGRANT EXECUTE",
+      "table": "FUNCTION",
+      "using": null,
+      "withCheck": null
+    }
+  ],
+  "rpcs": [
+    "handle_new_user",
+    "update_orders_updated_at",
+    "update_inventory_updated_at",
+    "get_user_role",
+    "is_stall_operator",
+    "generate_order_number",
+    "sync_remaining_meals",
+    "reserve_meal_item",
+    "get_operator_college_id",
+    "update_subscriptions_updated_at",
+    "update_menu_schedules_updated_at",
+    "create_notification",
+    "handle_new_user",
+    "handle_new_user",
+    "calculate_subscription_expiry",
+    "recalculate_overlapping_subscriptions",
+    "purchase_subscription",
+    "update_inventory_batches_updated_at",
+    "update_inventory_batch_items_updated_at",
+    "activate_inventory_batch",
+    "record_inventory_movement",
+    "close_inventory_batch",
+    "cancel_inventory_batch",
+    "place_order",
+    "activate_inventory_batch",
+    "close_inventory_batch",
+    "cancel_inventory_batch",
+    "record_inventory_movement",
+    "place_order",
+    "place_order",
+    "place_order",
+    "submit_order_payment_proof",
+    "verify_order_payment",
+    "reject_order_payment",
+    "mark_cash_collected",
+    "expire_unverified_upi_orders",
+    "create_subscription_purchase_request",
+    "submit_subscription_payment_proof",
+    "approve_subscription_purchase",
+    "reject_subscription_purchase",
+    "submit_order_payment_proof",
+    "verify_order_payment",
+    "reject_order_payment",
+    "expire_unverified_upi_orders",
+    "submit_subscription_payment_proof",
+    "approve_subscription_purchase",
+    "reject_subscription_purchase",
+    "create_notification",
+    "get_current_operational_date",
+    "close_expired_inventory_batches",
+    "record_inventory_movement",
+    "create_subscription_purchase_request",
+    "approve_subscription_purchase",
+    "place_order",
+    "create_subscription_purchase_request",
+    "place_order",
+    "accept_order",
+    "release_subscription_reservation",
+    "expire_unverified_upi_orders",
+    "reject_order_payment",
+    "create_subscription_purchase_request"
+  ]
+}
