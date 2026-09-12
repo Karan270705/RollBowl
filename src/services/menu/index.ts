@@ -94,7 +94,6 @@ export async function fetchScheduledMeals(scheduleId: string): Promise<Meal[]> {
         originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
         category: row.category,
         type: row.type,
-        stallId: row.stall_id,
         imageUrl: row.image_url,
         isAvailable: row.is_available, // This is the base availability, schedule overrides it
         isFeatured: row.is_featured,

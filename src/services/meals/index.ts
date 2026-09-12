@@ -13,7 +13,6 @@ interface MealRow {
   original_price: number | null;
   category: string;
   type: string;
-  stall_id: string;
   image_url: string;
   is_available: boolean;
   is_featured: boolean;
@@ -44,7 +43,6 @@ function mapMeal(row: MealRow): Meal {
     originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
     category: row.category as MealCategory,
     type: row.type as Meal['type'],
-    stallId: row.stall_id,
     imageUrl: row.image_url,
     isAvailable: row.is_available,
     isFeatured: row.is_featured,

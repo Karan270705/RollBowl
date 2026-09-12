@@ -50,7 +50,10 @@
           "photosPermission": "Allow RollBowl to access your photos to upload payment screenshots.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

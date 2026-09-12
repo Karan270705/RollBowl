@@ -97,7 +97,6 @@ export interface Meal {
   originalPrice?: number;  // for showing discounts
   category: MealCategory;
   type: MealType;
-  stallId: string;
   imageUrl: string;
   isAvailable: boolean;
   isFeatured: boolean;

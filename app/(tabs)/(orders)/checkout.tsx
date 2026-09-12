@@ -275,14 +275,14 @@ export default function CheckoutScreen() {
       }
 
       // 4. refetch operational facts
-      const orderStallId = items[0].meal.stallId;
-      if (!orderStallId) {
+      // Use stallId from operational context (meals are now global, not per-stall)
+      if (!stallId) {
         alert("We could not place your order. Please try again.");
         setCheckoutState('REVIEW');
         return;
       }
 
-      const freshOpFacts = await resolveOperationalFacts(orderStallId, cartPickupDate);
+      const freshOpFacts = await resolveOperationalFacts(stallId, cartPickupDate);
 
       // 5. verify ordering is still open & 6. verify menu date matches cartPickupDate
       if (
@@ -357,7 +357,7 @@ export default function CheckoutScreen() {
 
       const newOrder = await placeOrder(
         user.id,
-        orderStallId,
+        stallId,
         engineResult.processedItems,
         freshOpFacts.operationalDate,
         pickupSlot,
@@ -377,7 +377,7 @@ export default function CheckoutScreen() {
       console.log('[CUSTOMER ORDER COMMITTED]', JSON.stringify({
         requestId: currentRequestId,
         orderId: newOrder.id,
-        stallId: orderStallId,
+        stallId: stallId,
         pickupDate: freshOpFacts.operationalDate,
         status: newOrder.status || 'pending',
         paymentMethod: resolvedPaymentMethod,
