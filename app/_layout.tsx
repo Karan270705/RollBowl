@@ -8,6 +8,7 @@ import { AppConfig } from '@/src/constants/config';
 import { useAuthStore } from '@/src/store';
 import { SessionProvider } from '@/src/components/providers/SessionProvider';
 import { AuthDeepLinkProvider } from '@/src/components/providers/AuthDeepLinkProvider';
+import { CustomerStallProvider } from '@/src/contexts/CustomerStallContext';
 import { StartupScreen, RootErrorBoundary } from '@/src/components/startup';
 import { logStartupStage } from '@/src/utils/startupLogger';
 
@@ -78,12 +79,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <AuthDeepLinkProvider>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="(tabs)" />
-            </Stack>
+            <CustomerStallProvider>
+              <StatusBar style="dark" />
+              <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="(tabs)" />
+              </Stack>
+            </CustomerStallProvider>
           </AuthDeepLinkProvider>
         </SessionProvider>
       </QueryClientProvider>

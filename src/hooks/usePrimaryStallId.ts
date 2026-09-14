@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { getPrimaryStallId } from '../utils/operationalDate';
+import { getPrimaryStallId, getCustomerStallId } from '../utils/operationalDate';
 import { logStartupStage, logStartupError } from '../utils/startupLogger';
+import { useUser } from '../store';
 
+// Existing hook - keep as is
 export function usePrimaryStallId() {
   return useQuery({
     queryKey: ['primary-stall'],
@@ -19,6 +21,28 @@ export function usePrimaryStallId() {
       }
     },
     staleTime: 1000 * 60 * 60, // 1 hour
+    retry: 1,
+  });
+}
+
+// NEW: Customer-aware hook
+export function useCustomerPrimaryStallId() {
+  const user = useUser();
+
+  return useQuery({
+    queryKey: ['primary-stall', user?.id],
+    queryFn: async () => {
+      try {
+        const stallId = await getCustomerStallId(user?.id);
+        console.log('[useCustomerPrimaryStallId] Resolved stall:', stallId);
+        return stallId;
+      } catch (err) {
+        console.error('[useCustomerPrimaryStallId] Error:', err);
+        throw err;
+      }
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5, // 5 minutes (shorter since it can change)
     retry: 1,
   });
 }

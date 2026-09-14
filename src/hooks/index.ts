@@ -11,3 +11,4 @@ export { useActiveSubscription, useSubscriptionPlan, useSubscriptionPlans, usePu
 export { useNotifications, useMarkAllNotificationsAsRead, useMarkNotificationAsRead } from './useNotifications';
 export { useLiveInventory } from './useInventory';
 export type { CustomerInventoryItem } from './useInventory';
+export { useActiveStalls, useStallById, useUserPreferredStall, useUpdatePreferredStall, useStallsWithMeal } from './useStalls';

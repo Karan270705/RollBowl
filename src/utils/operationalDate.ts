@@ -12,6 +12,38 @@ export async function getPrimaryStallId(): Promise<string> {
   return data.id;
 }
 
+/**
+ * Get user's preferred stall, falling back to first active stall
+ * Used by customer app for stall-aware queries
+ */
+export async function getCustomerStallId(userId?: string): Promise<string> {
+  // If user has preferred stall, use it
+  if (userId) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('preferred_stall_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (userData?.preferred_stall_id) {
+      // Verify it's still active
+      const { data: stall } = await supabase
+        .from('stalls')
+        .select('id')
+        .eq('id', userData.preferred_stall_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (stall) {
+        return stall.id;
+      }
+    }
+  }
+
+  // Fallback to first active stall
+  return getPrimaryStallId();
+}
+
 // Helper to get today's date string in IST safely across all JS engines (e.g. Hermes)
 export function getTodayISTDateString(): string {
   const parts = new Intl.DateTimeFormat('en-US', {

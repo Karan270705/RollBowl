@@ -75,6 +75,7 @@ export interface Stall {
   operatorId: string;
   description: string;
   imageUrl?: string;
+  location?: string;
   isActive: boolean;
   rating: number;
   totalRatings: number;
