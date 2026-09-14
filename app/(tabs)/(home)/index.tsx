@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SectionList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SectionList, Modal, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radii, Shadows } from '@/src/constants/theme';
@@ -11,6 +11,7 @@ import { useAllMeals, useScheduledMeals, useOperationalWindow, useLiveInventory 
 import { useQueryClient } from '@tanstack/react-query';
 import { getGreeting, formatFriendlyDate, formatTime, formatScheduleWindow } from '@/src/utils/formatters';
 import { resolveCustomerMealAvailability, type InventoryMode } from '@/src/engine/availabilityResolver';
+import { useCustomerStall } from '@/src/contexts/CustomerStallContext';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -20,6 +21,31 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
+
+  // ─── Customer Stall Context ────────────────────────────────────
+  const {
+    selectedStall,
+    availableStalls,
+    selectStall,
+    isLoading: isLoadingStallContext
+  } = useCustomerStall();
+  
+  const [showStallModal, setShowStallModal] = useState(false);
+
+  const handleStallChange = async (stallId: string) => {
+    if (stallId === selectedStall?.id) {
+      setShowStallModal(false);
+      return;
+    }
+    try {
+      console.log('[Home] Switching stall to:', stallId);
+      await selectStall(stallId);
+      setShowStallModal(false);
+    } catch (error) {
+      console.error('[Home] Failed to switch stall:', error);
+      Alert.alert('Error', 'Failed to switch stall. Please try again.');
+    }
+  };
 
   // ─── Operational Engine ─────────────────────────────────────────
   const {
@@ -31,7 +57,7 @@ export default function HomeScreen() {
     operationalContext,
     targetDate,
     primaryStallId,
-  } = useOperationalWindow();
+  } = useOperationalWindow(selectedStall?.id);
   
   const { data: availableMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
 
@@ -41,7 +67,7 @@ export default function HomeScreen() {
 
   const { data: allMeals = [] } = useAllMeals();
 
-  const isLoading = isLoadingOp || isLoadingMeals || isLoadingInventory;
+  const isLoading = isLoadingOp || isLoadingMeals || isLoadingInventory || isLoadingStallContext;
 
   // Active batch / mode resolution
   const activeBatch = inventory.find(
@@ -364,6 +390,30 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Stall Selector */}
+        {availableStalls.length > 0 && (
+          <View style={styles.stallSelectorContainer}>
+            <Text style={styles.stallSelectorLabel}>Ordering from:</Text>
+            {availableStalls.length > 1 ? (
+              <TouchableOpacity
+                style={styles.stallSelector}
+                onPress={() => setShowStallModal(true)}
+              >
+                <Text style={styles.stallSelectorText}>
+                  {selectedStall?.name || 'Select Stall'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.stallSelector}>
+                <Text style={styles.stallSelectorText}>
+                  {selectedStall?.name || 'Loading...'}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Store Status Banner */}
         <View style={[
           styles.statusBanner,
@@ -478,6 +528,50 @@ export default function HomeScreen() {
         stickySectionHeadersEnabled={false}
       />
       <StickyCartBar />
+
+      {/* Stall Selection Modal */}
+      <Modal
+        visible={showStallModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowStallModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Stall</Text>
+              <TouchableOpacity onPress={() => setShowStallModal(false)}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.stallList}>
+              {availableStalls.map((stall) => (
+                <TouchableOpacity
+                  key={stall.id}
+                  style={[
+                    styles.stallModalItem,
+                    selectedStall?.id === stall.id && styles.stallModalItemActive
+                  ]}
+                  onPress={() => handleStallChange(stall.id)}
+                >
+                  <View style={styles.stallModalInfo}>
+                    <Text style={styles.stallModalName}>{stall.name}</Text>
+                    {stall.description && (
+                      <Text style={styles.stallModalDescription}>
+                        {stall.description}
+                      </Text>
+                    )}
+                  </View>
+                  {selectedStall?.id === stall.id && (
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 }
@@ -579,5 +673,92 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     marginHorizontal: -Spacing.base, // bleed to edge
     marginBottom: Spacing.lg,
+  },
+  
+  // ─── Stall Selector & Modal Styles ─────────────────────────
+  stallSelectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    marginBottom: Spacing.md,
+    ...Shadows.subtleCard,
+  },
+  stallSelectorLabel: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    fontFamily: Typography.family.medium,
+  },
+  stallSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  stallSelectorText: {
+    fontSize: Typography.size.base,
+    color: Colors.textPrimary,
+    fontFamily: Typography.family.semiBold,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radii.xl,
+    borderTopRightRadius: Radii.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing['3xl'],
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  modalTitle: {
+    fontSize: Typography.size.lg,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  stallList: {
+    marginTop: Spacing.md,
+  },
+  stallModalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  stallModalItemActive: {
+    backgroundColor: Colors.successLight,
+    borderRadius: Radii.md,
+    borderBottomWidth: 0,
+    marginVertical: 4,
+  },
+  stallModalInfo: {
+    flex: 1,
+  },
+  stallModalName: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+  },
+  stallModalDescription: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
 });

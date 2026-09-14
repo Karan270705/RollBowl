@@ -8,8 +8,9 @@ import { supabase } from '@/src/lib/supabase';
 /**
  * The single source of truth hook for the Customer App's operational state.
  */
-export function useOperationalWindow() {
-  const { data: primaryStallId } = usePrimaryStallId();
+export function useOperationalWindow(customStallId?: string | null) {
+  const { data: defaultPrimaryStallId } = usePrimaryStallId();
+  const primaryStallId = customStallId || defaultPrimaryStallId;
   const operationalContext = useOperationalContext(primaryStallId);
   const { resolvedOperationalDate, preparationDate, calendarDate, isResolving } = operationalContext;
   const isValidStall = Boolean(primaryStallId && primaryStallId !== 'none');

@@ -79,7 +79,7 @@ export function CustomerStallProvider({ children }: { children: ReactNode }) {
   return (
     <CustomerStallContext.Provider
       value={{
-        selectedStall,
+        selectedStall: selectedStall ?? null,
         selectedStallId,
         availableStalls,
         isLoading,

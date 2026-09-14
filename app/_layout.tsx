@@ -5,13 +5,13 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppConfig } from '@/src/constants/config';
-import { useAuthStore } from '@/src/store';
+import { useAuthStore, useUser } from '@/src/store';
 import { SessionProvider } from '@/src/components/providers/SessionProvider';
 import { AuthDeepLinkProvider } from '@/src/components/providers/AuthDeepLinkProvider';
-import { CustomerStallProvider } from '@/src/contexts/CustomerStallContext';
+import { CustomerStallProvider, useCustomerStall } from '@/src/contexts/CustomerStallContext';
 import { StartupScreen, RootErrorBoundary } from '@/src/components/startup';
 import { logStartupStage } from '@/src/utils/startupLogger';
-
+import { StallSelectionModal } from '@/src/components/StallSelectionModal';
 logStartupStage('02_SPLASH_PREVENTION_COMPLETED');
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -74,18 +74,65 @@ export default function RootLayout() {
     return <StartupScreen />;
   }
 
+function AppContent() {
+  const user = useUser();
+  const { selectedStall, availableStalls, isLoading, selectStall } = useCustomerStall();
+  const [showMigrationModal, setShowMigrationModal] = React.useState(false);
+
+  // Check if user needs stall selection (migration fallback)
+  React.useEffect(() => {
+    // Only check for logged-in customers
+    if (!user || user.role !== 'customer') return;
+
+    // Wait for loading to complete
+    if (isLoading) return;
+
+    // If no stall selected and stalls are available, show modal
+    if (!selectedStall && availableStalls.length > 0) {
+      console.log('[Migration] User has no preferred stall, showing selection modal');
+      setShowMigrationModal(true);
+    }
+  }, [user, selectedStall, availableStalls, isLoading]);
+
+  const handleMigrationStallSelection = async (stallId: string) => {
+    try {
+      await selectStall(stallId);
+      setShowMigrationModal(false);
+    } catch (error) {
+      console.error('[Migration] Failed to set stall:', error);
+      alert('Failed to set your preferred stall. Please try again.');
+    }
+  };
+
+  return (
+    <>
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+
+      <StallSelectionModal
+        visible={showMigrationModal}
+        stalls={availableStalls}
+        isLoading={isLoading}
+        onSelectStall={handleMigrationStallSelection}
+        title="Welcome Back!"
+        subtitle="We've updated the app! Please select your preferred food stall to continue."
+        isRequired={true}
+      />
+    </>
+  );
+}
+
   return (
     <RootErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <AuthDeepLinkProvider>
             <CustomerStallProvider>
-              <StatusBar style="dark" />
-              <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="(tabs)" />
-              </Stack>
+              <AppContent />
             </CustomerStallProvider>
           </AuthDeepLinkProvider>
         </SessionProvider>
@@ -93,4 +140,3 @@ export default function RootLayout() {
     </RootErrorBoundary>
   );
 }
-
