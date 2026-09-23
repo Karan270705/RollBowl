@@ -69,20 +69,37 @@ export default function SignupScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const { user, session } = await signUp({ name, email, phone, password });
+      console.log('[Signup] Starting signup for:', email);
+      console.log('[Signup] Selected stall ID:', selectedStallId);
 
-      // After the trigger creates the user profile, update with preferred stall
+      const { user, session } = await signUp({ name, email, phone, password });
+      console.log('[Signup] Auth signup successful, user ID:', user?.id);
+
+      // After the trigger creates the user profile, update with college_id and preferred_stall_id
       if (user) {
+        // Get the selected stall's college_id
+        const selectedStall = availableStalls.find(s => s.id === selectedStallId);
+        console.log('[Signup] Selected stall data:', selectedStall);
+
+        if (!selectedStall) {
+          throw new Error('Selected stall not found');
+        }
+
+        console.log('[Signup] Updating user with college_id:', selectedStall.collegeId, 'stall_id:', selectedStallId);
+
         const { error: updateError } = await supabase
           .from('users')
-          .update({ preferred_stall_id: selectedStallId })
+          .update({
+            college_id: selectedStall.collegeId,
+            preferred_stall_id: selectedStallId
+          })
           .eq('id', user.id);
 
         if (updateError) {
-          console.warn('[Signup] Failed to set preferred stall:', updateError.message);
-          // Non-fatal: stall selection will fallback in CustomerStallContext
+          console.error('[Signup] Failed to set college and stall:', updateError);
+          throw new Error(`Database error: ${updateError.message}`);
         } else {
-          console.log('[Signup] Preferred stall set:', selectedStallId);
+          console.log('[Signup] ✅ College and preferred stall set successfully');
         }
       }
 
@@ -94,9 +111,11 @@ export default function SignupScreen() {
           [{ text: 'OK', onPress: () => router.replace('/(auth)/login' as any) }]
         );
       } else if (session) {
+        console.log('[Signup] ✅ Signup complete, navigating to home');
         router.replace('/(tabs)/(home)' as any);
       }
     } catch (err: any) {
+      console.error('[Signup] Error during signup:', err);
       setErrorMsg(err.message || 'Failed to sign up.');
     } finally {
       setLoading(false);

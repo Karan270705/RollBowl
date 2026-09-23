@@ -78,6 +78,7 @@ export async function resolveOperationalFacts(stallId: string, resolvedOperation
   const { data: menuData, error: menuDataError } = await supabase
     .from('menu_schedules')
     .select('*')
+    .eq('stall_id', stallId)
     .eq('menu_date', operationalDate)
     .eq('is_published', true)
     .maybeSingle();

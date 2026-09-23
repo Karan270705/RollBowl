@@ -28,12 +28,95 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/src/lib/supabase";
 import { useRouter } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert, Modal } from "react-native";
 import { UpiPaymentPanel } from "@/src/components/payments/UpiPaymentPanel";
 import { PaymentScreenshotPicker, SelectedImage } from "@/src/components/payments/PaymentScreenshotPicker";
 import { usePaymentSettings, useSubmitOrderProof } from "@/src/hooks/payments/usePayments";
 import { uploadPaymentScreenshot, parsePaymentBackendError } from "@/src/services/payments";
 import { resolveOperationalFacts } from "@/src/engine/operationalEngine";
+import { useCustomerStall } from "@/src/contexts/CustomerStallContext";
+import { Stall, CartItem } from "@/src/types/models";
+
+// ─── getCompatibleStalls Helper ─────────────────────────────────────────────
+// For each available stall, checks whether ALL cart meal IDs appear in its
+// published scheduled_meals for the given pickup date. Always includes the
+// current cartStallId stall (even if menu is missing) so the user's existing
+// binding is never silently dropped.
+const getCompatibleStalls = async (
+  cartItems: CartItem[],
+  pickupDate: string,
+  availableStalls: Stall[],
+  cartStallId: string | null
+): Promise<Stall[]> => {
+  const cartMealIds = new Set(cartItems.map(item => item.meal.id));
+  console.log('🔍 [COMPATIBLE STALLS] Starting check:', {
+    cartItems: cartItems.map(i => ({ id: i.meal.id, name: i.meal.name })),
+    pickupDate,
+    availableStallCount: availableStalls.length,
+    stallNames: availableStalls.map(s => s.name),
+    cartStallId
+  });
+
+  const compatible: Stall[] = [];
+
+  for (const stall of availableStalls) {
+    console.log(`\n📍 Checking: ${stall.name} (${stall.id})`);
+
+    const opFacts = await resolveOperationalFacts(stall.id, pickupDate);
+
+    if (!opFacts?.activeMenu?.id) {
+      console.log(`  ❌ No active menu`);
+      if (stall.id === cartStallId) {
+        console.log(`  ✓ Adding anyway (cart stall)`);
+        compatible.push(stall);
+      }
+      continue;
+    }
+
+    console.log(`  ✓ Has menu: ${opFacts.activeMenu.id}`);
+
+    const { data: scheduledMeals, error } = await supabase
+      .from('menu_schedule_items')
+      .select('meal_id')
+      .eq('menu_schedule_id', opFacts.activeMenu.id);
+
+    if (error) {
+      console.error(`  ❌ Query error:`, error);
+      continue;
+    }
+
+    if (!scheduledMeals || scheduledMeals.length === 0) {
+      console.log(`  ❌ No scheduled meals found`);
+      continue;
+    }
+
+    const availableMealIds = new Set(scheduledMeals.map((sm: any) => sm.meal_id));
+    console.log(`  📦 Available meals (${availableMealIds.size}):`, Array.from(availableMealIds));
+    console.log(`  🛒 Cart meals needed:`, Array.from(cartMealIds));
+
+    const hasAllItems = Array.from(cartMealIds).every(mealId => {
+      const has = availableMealIds.has(mealId);
+      if (!has) {
+        console.log(`    ❌ Missing meal: ${mealId}`);
+      }
+      return has;
+    });
+
+    console.log(`  ${hasAllItems ? '✅' : '❌'} Has all cart items: ${hasAllItems}`);
+
+    if (hasAllItems || stall.id === cartStallId) {
+      console.log(`  ✓ ADDING to compatible list`);
+      compatible.push(stall);
+    }
+  }
+
+  console.log('\n✅ [COMPATIBLE STALLS] Final result:', {
+    count: compatible.length,
+    stalls: compatible.map(s => ({ id: s.id, name: s.name }))
+  });
+
+  return compatible;
+};
 
 type CheckoutState =
   | 'REVIEW'
@@ -51,7 +134,7 @@ export type CheckoutPaymentMode =
 export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { items, cartPickupDate, clearCart, updateQuantity, removeItem } = useCartStore();
+  const { items, cartPickupDate, cartStallId, clearCart, updateQuantity, removeItem } = useCartStore();
   const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
   const user = useUser();
   const [pickupSlot, setPickupSlot] = useState<string>("12:00 PM - 12:30 PM");
@@ -109,28 +192,50 @@ export default function CheckoutScreen() {
     };
   }, []);
 
-  const { data: opFacts, isLoading: isLoadingOp } = useOperationalWindow();
+  const { selectedStall, availableStalls } = useCustomerStall();
+  const { data: opFacts, isLoading: isLoadingOp } = useOperationalWindow(selectedStall?.id);
   const { data: scheduledMeals = [], isLoading: isLoadingMeals } = useScheduledMeals(opFacts?.activeMenu?.id);
+
+  // ─── Checkout Stall State ─────────────────────────────────────────
+  // selectedCheckoutStallId is LOCAL to this checkout session.
+  // It never persists the user's global stall preference — that would be wrong
+  // for a checkout-only stall override (e.g. picking a different pickup point).
+  const [selectedCheckoutStallId, setSelectedCheckoutStallId] = useState<string | null>(cartStallId);
+
+  // Sync to cartStallId on mount (handles cold-start or direct deep-link)
+  useEffect(() => {
+    if (cartStallId && !selectedCheckoutStallId) {
+      setSelectedCheckoutStallId(cartStallId);
+    }
+  }, [cartStallId]);
+
+  // The effective stall used for payment settings, inventory, and placeOrder
+  const effectiveStallId = selectedCheckoutStallId || cartStallId || opFacts?.activeMenu?.stall_id;
+
+  // Compatible stalls state
+  const [compatibleStalls, setCompatibleStalls] = useState<Stall[]>([]);
+  const [isLoadingCompatible, setIsLoadingCompatible] = useState(false);
+  const [showStallModal, setShowStallModal] = useState(false);
   
-  const stallId = opFacts?.activeMenu?.stall_id;
-  
-  // Payment Settings
-  const { data: paymentSettings, isLoading: isLoadingSettings } = usePaymentSettings(stallId);
+  // Payment Settings — use effectiveStallId so payment QR changes when user switches checkout stall
+  const { data: paymentSettings, isLoading: isLoadingSettings } = usePaymentSettings(effectiveStallId);
   const submitProofMutation = useSubmitOrderProof();
 
-  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(stallId, opFacts?.operationalDate);
+  const { data: inventory = [], isLoading: isLoadingInventory } = useLiveInventory(effectiveStallId, opFacts?.operationalDate);
   const { data: subscription, isLoading: isLoadingSub } = useActiveSubscription(user?.id);
   const { data: plan, isLoading: isLoadingPlan } = useSubscriptionPlan(subscription?.planId);
 
   // Active Batch resolution
   const activeBatch = inventory.find(
-    (b) => b.batch_status === 'active' && b.stall_id === stallId && b.inventory_date === opFacts?.operationalDate
+    (b) => b.batch_status === 'active' && b.stall_id === effectiveStallId && b.inventory_date === opFacts?.operationalDate
   );
   const activeBatchId = activeBatch ? activeBatch.batch_id : null;
   const inventoryMode: InventoryMode = activeBatchId ? 'LIVE_INVENTORY' : 'UNTRACKED';
 
   console.log('[CHECKOUT INVENTORY CONTEXT]', {
     resolvedDate: opFacts?.operationalDate,
+    effectiveStallId,
+    selectedCheckoutStallId,
     activeBatchId,
     inventoryMode,
     inventoryLength: inventory.length
@@ -140,6 +245,42 @@ export default function CheckoutScreen() {
     items.length > 0 &&
     (!cartPickupDate || (opFacts?.operationalDate && cartPickupDate !== opFacts.operationalDate))
   );
+
+  // ─── Compatible Stalls Resolver ──────────────────────────────────
+  // Uses getCompatibleStalls() which queries scheduled_meals per stall to find
+  // stalls whose published menu includes ALL cart items for the pickup date.
+  useEffect(() => {
+    if (items.length > 0 && cartPickupDate && availableStalls.length > 0) {
+      console.log('[CHECKOUT] Fetching compatible stalls...', {
+        itemCount: items.length,
+        cartPickupDate,
+        availableStallsCount: availableStalls.length
+      });
+
+      setIsLoadingCompatible(true);
+      getCompatibleStalls(items, cartPickupDate, availableStalls, cartStallId)
+        .then(result => {
+          console.log('[CHECKOUT] Compatible stalls resolved:', result.map(s => s.name));
+          setCompatibleStalls(result);
+        })
+        .catch(err => console.error('[COMPATIBLE STALLS ERROR]', err))
+        .finally(() => setIsLoadingCompatible(false));
+    } else {
+      console.log('[CHECKOUT] No filtering needed, using all stalls');
+      setCompatibleStalls(availableStalls);
+    }
+  }, [items, cartPickupDate, availableStalls, cartStallId]);
+
+  // ─── Checkout Stall Switcher (LOCAL-ONLY) ─────────────────────────
+  // Does NOT call selectStall() or persist the global user preference.
+  // Only affects this checkout session's pickup location.
+  const handleCheckoutStallSelect = (stallId: string) => {
+    console.log('[Checkout] Switching checkout stall (local) to:', stallId);
+    setSelectedCheckoutStallId(stallId);
+    setShowStallModal(false);
+    // Invalidate operational window so payment QR / inventory refresh
+    queryClient.invalidateQueries({ queryKey: ['operationalWindow', stallId] });
+  };
 
   React.useEffect(() => {
     if (opFacts) {
@@ -274,15 +415,14 @@ export default function CheckoutScreen() {
         }
       }
 
-      // 4. refetch operational facts
-      // Use stallId from operational context (meals are now global, not per-stall)
-      if (!stallId) {
+      // 4. refetch operational facts for the checkout-selected stall
+      if (!effectiveStallId) {
         alert("We could not place your order. Please try again.");
         setCheckoutState('REVIEW');
         return;
       }
 
-      const freshOpFacts = await resolveOperationalFacts(stallId, cartPickupDate);
+      const freshOpFacts = await resolveOperationalFacts(effectiveStallId, cartPickupDate);
 
       // 5. verify ordering is still open & 6. verify menu date matches cartPickupDate
       if (
@@ -302,7 +442,7 @@ export default function CheckoutScreen() {
         const { data: latestInventory, error: fetchError } = await supabase
           .from("customer_safe_inventory")
           .select("*")
-          .eq("stall_id", stallId)
+          .eq("stall_id", effectiveStallId)
           .eq("inventory_date", freshOpFacts.operationalDate);
 
         const currentActiveBatch = latestInventory?.find((b: any) => b.batch_status === 'active');
@@ -352,12 +492,12 @@ export default function CheckoutScreen() {
         itemCount: engineResult.processedItems.length,
       }, null, 2));
 
-      // 10. create exactly one order
+      // 10. create exactly one order at the checkout-selected stall
       const appliedSubscriptionId = (engineResult.subscriptionUpdates && subscription) ? subscription.id : undefined;
 
       const newOrder = await placeOrder(
         user.id,
-        stallId,
+        effectiveStallId,
         engineResult.processedItems,
         freshOpFacts.operationalDate,
         pickupSlot,
@@ -377,7 +517,9 @@ export default function CheckoutScreen() {
       console.log('[CUSTOMER ORDER COMMITTED]', JSON.stringify({
         requestId: currentRequestId,
         orderId: newOrder.id,
-        stallId: stallId,
+        stallId: effectiveStallId,
+        selectedCheckoutStallId,
+        cartStallId,
         pickupDate: freshOpFacts.operationalDate,
         status: newOrder.status || 'pending',
         paymentMethod: resolvedPaymentMethod,
@@ -495,6 +637,119 @@ export default function CheckoutScreen() {
   const isRecovering = checkoutState === 'AWAITING_PROOF' || checkoutState === 'ORDER_CREATED';
   const isUploading = checkoutState === 'SUBMITTING' && !!createdOrderId;
 
+  // ─── Pickup Location Card ──────────────────────────────────────────
+  // Resolves the display stall from selectedCheckoutStallId → compatibleStalls lookup
+  const checkoutStall =
+    compatibleStalls.find(s => s.id === selectedCheckoutStallId) ??
+    compatibleStalls[0] ??
+    selectedStall;
+
+  const canSwitchStall = compatibleStalls.length > 1 && !isLocked;
+
+  console.log('[CHECKOUT RENDER]', {
+    compatibleStallsCount: compatibleStalls.length,
+    compatibleStallNames: compatibleStalls.map(s => s.name),
+    isLocked,
+    canSwitchStall,
+    checkoutStallName: checkoutStall?.name
+  });
+
+  const renderPickupLocationCard = () => (
+    <View style={[styles.card, styles.pickupLocationCard]}>
+      <Text style={styles.cardTitle}>Pickup Location</Text>
+      <View style={styles.pickupLocationInner}>
+        <View style={styles.pickupLocationLeft}>
+          <Ionicons name="location" size={18} color={Colors.primary} style={{ marginRight: Spacing.sm }} />
+          <Text style={styles.pickupStallName}>
+            {isLoadingCompatible ? 'Finding stalls…' : (checkoutStall?.name || 'Loading…')}
+          </Text>
+        </View>
+        {canSwitchStall && (
+          <TouchableOpacity
+            style={styles.changeStallBtn}
+            onPress={() => {
+              console.log('🔘 [CHANGE STALL CLICKED]', {
+                compatibleCount: compatibleStalls.length,
+                compatibleStalls: compatibleStalls.map(s => s.name)
+              });
+              setShowStallModal(true);
+            }}
+            disabled={isLocked}
+          >
+            <Text style={styles.changeStallText}>Change Stall</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderStallModal = () => {
+    console.log('🏪 [MODAL RENDER]', {
+      visible: showStallModal,
+      compatibleCount: compatibleStalls.length,
+      compatibleNames: compatibleStalls.map(s => s.name),
+      willShowList: compatibleStalls.length > 1
+    });
+
+    return (
+      <Modal
+      visible={showStallModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowStallModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { minHeight: 400 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Pickup Stall</Text>
+            <TouchableOpacity onPress={() => setShowStallModal(false)}>
+              <Ionicons name="close" size={24} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {compatibleStalls.length <= 1 ? (
+            <View style={styles.noCompatibleStallsContainer}>
+              <Ionicons name="information-circle-outline" size={32} color={Colors.textTertiary} />
+              <Text style={styles.noCompatibleStallsText}>
+                No other stalls have all items in your cart available today.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView 
+              style={styles.stallList}
+              contentContainerStyle={{ paddingBottom: Spacing.lg }}
+            >
+              {compatibleStalls.map((stall) => (
+                <TouchableOpacity
+                  key={stall.id}
+                  style={[
+                    styles.stallModalItem,
+                    selectedCheckoutStallId === stall.id && styles.stallModalItemActive
+                  ]}
+                  onPress={() => handleCheckoutStallSelect(stall.id)}
+                >
+                  <View style={styles.stallModalInfo}>
+                    <Text style={styles.stallModalName}>{stall.name}</Text>
+                    {stall.description && (
+                      <Text style={styles.stallModalDescription}>
+                        {stall.description}
+                      </Text>
+                    )}
+                  </View>
+                  {selectedCheckoutStallId === stall.id && (
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+    );
+  };
+
   return (
     <ScreenWrapper>
       <View style={styles.header}>
@@ -504,6 +759,8 @@ export default function CheckoutScreen() {
         <Text style={styles.title}>Checkout</Text>
         <View style={{ width: 24 }} />
       </View>
+      {renderPickupLocationCard()}
+      {renderStallModal()}
 
       <ScrollView contentContainerStyle={{ paddingBottom: Spacing['4xl'] }} showsVerticalScrollIndicator={false}>
         {opFacts?.isHoliday ? (
@@ -525,6 +782,21 @@ export default function CheckoutScreen() {
 
             {!isRecovering && (
               <>
+                {items.length > 0 && cartStallId && cartStallId !== selectedStall?.id && (
+                  <View style={[styles.card, { borderColor: Colors.error, borderWidth: 1, backgroundColor: Colors.errorLight }]}>
+                    <Text style={[styles.cardTitle, { color: Colors.error }]}>Stall Mismatch</Text>
+                    <Text style={{ fontSize: Typography.size.sm, color: Colors.textPrimary, marginBottom: Spacing.sm }}>
+                      Your cart items are from a different stall. This may happen if the stall was changed.
+                    </Text>
+                    <Button
+                      title="Clear Cart"
+                      onPress={() => clearCart()}
+                      variant="primary"
+                      size="sm"
+                    />
+                  </View>
+                )}
+
                 {isCartStaleOrLegacy && (
                   <View style={[styles.card, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight }]}>
                     <Text style={[styles.cardTitle, { color: Colors.warning }]}>Cart Menu Changed</Text>
@@ -916,5 +1188,110 @@ const styles = StyleSheet.create({
     fontFamily: Typography.family.medium,
     marginBottom: Spacing.xl,
     textAlign: "center",
+  },
+  // ─── Pickup Location Card Styles ─────────────────────────────────
+  pickupLocationCard: {
+    marginBottom: Spacing.md,
+  },
+  pickupLocationInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.xs,
+  },
+  pickupLocationLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  pickupStallName: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  changeStallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingLeft: Spacing.sm,
+  },
+  changeStallText: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
+    color: Colors.primary,
+  },
+  noCompatibleStallsContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  noCompatibleStallsText: {
+    fontSize: Typography.size.sm,
+    fontFamily: Typography.family.medium,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: Radii.xl,
+    borderTopRightRadius: Radii.xl,
+    paddingTop: Spacing.lg,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing['3xl'],
+    maxHeight: '70%',
+    minHeight: 300,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: Typography.size.lg,
+    fontFamily: Typography.family.bold,
+    color: Colors.textPrimary,
+  },
+  stallList: {
+    marginTop: Spacing.md,
+    flexGrow: 1,
+  },
+  stallModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.base,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radii.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.surface,
+    minHeight: 60,
+  },
+  stallModalItemActive: {
+    borderColor: Colors.success,
+    backgroundColor: Colors.successLight,
+  },
+  stallModalInfo: {
+    flex: 1,
+  },
+  stallModalName: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+  },
+  stallModalDescription: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
 });

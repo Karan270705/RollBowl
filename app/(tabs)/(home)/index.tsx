@@ -17,6 +17,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useUser();
   const addItem = useCartStore((state) => state.addItem);
+  const cartStallId = useCartStore((state) => state.cartStallId);
+  const cartStallName = useCartStore((state) => state.cartStallName);
+  const cartItems = useCartStore((state) => state.items);
+  const clearCart = useCartStore((state) => state.clearCart);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -37,14 +41,43 @@ export default function HomeScreen() {
       setShowStallModal(false);
       return;
     }
-    try {
-      console.log('[Home] Switching stall to:', stallId);
-      await selectStall(stallId);
-      setShowStallModal(false);
-    } catch (error) {
-      console.error('[Home] Failed to switch stall:', error);
-      Alert.alert('Error', 'Failed to switch stall. Please try again.');
+
+    const doSwitch = async () => {
+      try {
+        console.log('[Home] Switching stall to:', stallId);
+        await selectStall(stallId);
+        setShowStallModal(false);
+      } catch (error) {
+        console.error('[Home] Failed to switch stall:', error);
+        Alert.alert('Error', 'Failed to switch stall. Please try again.');
+      }
+    };
+
+    // If cart has items from a different stall, confirm before clearing
+    if (cartItems.length > 0 && cartStallId && cartStallId !== stallId) {
+      const newStall = availableStalls.find(s => s.id === stallId);
+      const oldStallLabel = cartStallName || selectedStall?.name || 'another stall';
+      const newStallLabel = newStall?.name || 'this stall';
+      Alert.alert(
+        'Switch Stall?',
+        `Your cart has items from ${oldStallLabel}. Switching to ${newStallLabel} will clear your cart.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Clear Cart & Switch',
+            style: 'destructive',
+            onPress: () => {
+              clearCart();
+              doSwitch();
+            },
+          },
+        ]
+      );
+      return;
     }
+
+    // No conflict — switch directly
+    await doSwitch();
   };
 
   // ─── Operational Engine ─────────────────────────────────────────
@@ -202,6 +235,78 @@ export default function HomeScreen() {
     return s;
   }, [groupedDailyMenu, filteredCatalog, availableMeals.length]);
 
+  // ─── Reusable Stall Selector Components ───────────────────
+  const StallSelectorBar = () => {
+    if (availableStalls.length === 0) return null;
+    return (
+      <View style={styles.stallSelectorContainer}>
+        <Text style={styles.stallSelectorLabel}>Ordering from:</Text>
+        {availableStalls.length > 1 ? (
+          <TouchableOpacity
+            style={styles.stallSelector}
+            onPress={() => setShowStallModal(true)}
+          >
+            <Text style={styles.stallSelectorText}>
+              {selectedStall?.name || 'Select Stall'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.stallSelector}>
+            <Text style={styles.stallSelectorText}>
+              {selectedStall?.name || 'Loading...'}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderStallModal = () => (
+    <Modal
+      visible={showStallModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowStallModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Stall</Text>
+            <TouchableOpacity onPress={() => setShowStallModal(false)}>
+              <Ionicons name="close" size={24} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.stallList}>
+            {availableStalls.map((stall) => (
+              <TouchableOpacity
+                key={stall.id}
+                style={[
+                  styles.stallModalItem,
+                  selectedStall?.id === stall.id && styles.stallModalItemActive
+                ]}
+                onPress={() => handleStallChange(stall.id)}
+              >
+                <View style={styles.stallModalInfo}>
+                  <Text style={styles.stallModalName}>{stall.name}</Text>
+                  {stall.description && (
+                    <Text style={styles.stallModalDescription}>
+                      {stall.description}
+                    </Text>
+                  )}
+                </View>
+                {selectedStall?.id === stall.id && (
+                  <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // ─── Loading ─────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -251,11 +356,13 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
           </View>
         </View>
+        <StallSelectorBar />
         <EmptyState
           icon="time-outline"
           title="Menu Scheduled"
           subtitle={opFacts.orderingStart ? `Menu will be available at ${formatTime(opFacts.orderingStart)}` : "Menu will be available later"}
         />
+        {renderStallModal()}
       </ScreenWrapper>
     );
   }
@@ -270,11 +377,13 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{user?.name ?? 'Student'}</Text>
           </View>
         </View>
+        <StallSelectorBar />
         <EmptyState
           icon="calendar-outline"
           title="Menu Coming Soon"
           subtitle="The kitchen has not published the upcoming menu yet. Please check back later!"
         />
+        {renderStallModal()}
       </ScreenWrapper>
     );
   }
@@ -300,6 +409,8 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        <StallSelectorBar />
+
         {/* Holiday Empty State */}
         <View style={styles.holidayContainer}>
           <Text style={styles.holidayEmoji}>🏖</Text>
@@ -324,6 +435,7 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
+        {renderStallModal()}
       </ScreenWrapper>
     );
   }
@@ -391,28 +503,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Stall Selector */}
-        {availableStalls.length > 0 && (
-          <View style={styles.stallSelectorContainer}>
-            <Text style={styles.stallSelectorLabel}>Ordering from:</Text>
-            {availableStalls.length > 1 ? (
-              <TouchableOpacity
-                style={styles.stallSelector}
-                onPress={() => setShowStallModal(true)}
-              >
-                <Text style={styles.stallSelectorText}>
-                  {selectedStall?.name || 'Select Stall'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.stallSelector}>
-                <Text style={styles.stallSelectorText}>
-                  {selectedStall?.name || 'Loading...'}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        <StallSelectorBar />
 
         {/* Store Status Banner */}
         <View style={[
@@ -495,7 +586,7 @@ export default function HomeScreen() {
           return false;
         }
       }
-      addItem(meal, opFacts?.operationalDate, 1);
+      addItem(meal, opFacts?.operationalDate, 1, selectedStall?.id, selectedStall?.name);
       return true;
     } : undefined;
 
@@ -530,48 +621,7 @@ export default function HomeScreen() {
       <StickyCartBar />
 
       {/* Stall Selection Modal */}
-      <Modal
-        visible={showStallModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowStallModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Stall</Text>
-              <TouchableOpacity onPress={() => setShowStallModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.stallList}>
-              {availableStalls.map((stall) => (
-                <TouchableOpacity
-                  key={stall.id}
-                  style={[
-                    styles.stallModalItem,
-                    selectedStall?.id === stall.id && styles.stallModalItemActive
-                  ]}
-                  onPress={() => handleStallChange(stall.id)}
-                >
-                  <View style={styles.stallModalInfo}>
-                    <Text style={styles.stallModalName}>{stall.name}</Text>
-                    {stall.description && (
-                      <Text style={styles.stallModalDescription}>
-                        {stall.description}
-                      </Text>
-                    )}
-                  </View>
-                  {selectedStall?.id === stall.id && (
-                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {renderStallModal()}
     </ScreenWrapper>
   );
 }
