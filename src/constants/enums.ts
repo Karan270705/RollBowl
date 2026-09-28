@@ -39,6 +39,7 @@ export enum PaymentMethod {
   CARD = 'card',
   CASH = 'cash',
   SUBSCRIPTION = 'subscription',
+  RAZORPAY = 'razorpay',
 }
 
 export enum SubscriptionStatus {
@@ -107,4 +108,5 @@ export const PaymentMethodLabels: Record<PaymentMethod, string> = {
   [PaymentMethod.CARD]: 'Debit/Credit Card',
   [PaymentMethod.CASH]: 'Cash on Pickup',
   [PaymentMethod.SUBSCRIPTION]: 'Covered by subscription',
+  [PaymentMethod.RAZORPAY]: 'Online Payment (Razorpay)',
 };

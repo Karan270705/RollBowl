@@ -111,6 +111,17 @@ export function resolveOrderPaymentDisplay(order: Order): OrderPaymentDisplay {
     };
   }
 
+  // 4b. Razorpay orders
+  if (order.paymentMethod === PaymentMethod.RAZORPAY) {
+    if (order.paymentStatus === PaymentStatus.PENDING) {
+      return {
+        type: 'UNKNOWN',
+        label: 'Payment Pending',
+        amountDue: order.total,
+      };
+    }
+  }
+
   // 5. Fallback without using cash as a generic fallback
   return {
     type: 'UNKNOWN',

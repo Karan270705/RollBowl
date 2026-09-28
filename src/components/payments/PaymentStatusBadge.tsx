@@ -5,10 +5,11 @@ import { PaymentVerificationStatus, SubscriptionRequestStatus } from '@/src/cons
 
 interface Props {
   status: PaymentVerificationStatus | SubscriptionRequestStatus;
+  paymentGateway?: string;
   style?: any;
 }
 
-export function PaymentStatusBadge({ status, style }: Props) {
+export function PaymentStatusBadge({ status, style, paymentGateway }: Props) {
   let label = '';
   let bgColor = '';
   let textColor = '';
@@ -21,15 +22,27 @@ export function PaymentStatusBadge({ status, style }: Props) {
       break;
     case PaymentVerificationStatus.AWAITING_PROOF:
     case SubscriptionRequestStatus.AWAITING_PROOF:
-      label = 'Awaiting Screenshot';
-      bgColor = Colors.warningLight;
-      textColor = Colors.warning;
+      if (paymentGateway === 'razorpay') {
+        label = 'Payment Pending';
+        bgColor = Colors.warningLight;
+        textColor = Colors.warning;
+      } else {
+        label = 'Awaiting Screenshot';
+        bgColor = Colors.warningLight;
+        textColor = Colors.warning;
+      }
       break;
     case PaymentVerificationStatus.PENDING:
     case SubscriptionRequestStatus.VERIFICATION_PENDING:
-      label = 'Pending Verification';
-      bgColor = Colors.infoLight;
-      textColor = Colors.info;
+      if (paymentGateway === 'razorpay') {
+        label = 'Processing Payment';
+        bgColor = Colors.infoLight;
+        textColor = Colors.info;
+      } else {
+        label = 'Pending Verification';
+        bgColor = Colors.infoLight;
+        textColor = Colors.info;
+      }
       break;
     case PaymentVerificationStatus.VERIFIED:
     case SubscriptionRequestStatus.APPROVED:

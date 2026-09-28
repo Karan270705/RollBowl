@@ -10,36 +10,51 @@ const { width } = Dimensions.get('window');
 
 export default function SubscriptionSuccessScreen() {
   const router = useRouter();
-  const { isReplacement } = useLocalSearchParams<{ isReplacement?: string }>();
+  const { isReplacement, paymentGateway } = useLocalSearchParams<{
+    isReplacement?: string;
+    paymentGateway?: string;
+  }>();
 
-  const titleText = isReplacement === 'true'
-    ? 'New payment proof submitted'
-    : 'Payment proof submitted';
+  const isRazorpay = paymentGateway === 'razorpay';
 
-  const bodyText = isReplacement === 'true'
-    ? 'New payment proof submitted. Your request is waiting for kitchen verification.'
-    : 'Your screenshot has been received. Your subscription will be activated after the kitchen verifies and approves the payment.';
+  const titleText = isRazorpay
+    ? 'Payment Successful!'
+    : (isReplacement === 'true'
+      ? 'New payment proof submitted'
+      : 'Payment proof submitted');
+
+  const bodyText = isRazorpay
+    ? 'Your payment was successful and your subscription is now active. You can start placing orders immediately!'
+    : (isReplacement === 'true'
+      ? 'New payment proof submitted. Your request is waiting for kitchen verification.'
+      : 'Your screenshot has been received. Your subscription will be activated after the kitchen verifies and approves the payment.');
 
   return (
     <ScreenWrapper>
       <View style={styles.container}>
         <View style={styles.iconCircle}>
-          <Ionicons name="time-outline" size={80} color={Colors.primary} />
+          <Ionicons
+            name={isRazorpay ? "checkmark-circle" : "time-outline"}
+            size={80}
+            color={isRazorpay ? Colors.success : Colors.primary}
+          />
         </View>
 
         <Text style={styles.title}>{titleText}</Text>
         <Text style={styles.subtitle}>{bodyText}</Text>
 
-        <View style={styles.infoBox}>
-          <View style={styles.infoRow}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={Colors.primary} />
-            <Text style={styles.infoText}>Status: Pending Verification</Text>
+        {!isRazorpay && (
+          <View style={styles.infoBox}>
+            <View style={styles.infoRow}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={Colors.primary} />
+              <Text style={styles.infoText}>Status: Pending Verification</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
+              <Text style={styles.infoText}>You will be notified once verified by Kitchen</Text>
+            </View>
           </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
-            <Text style={styles.infoText}>You will be notified once verified by Kitchen</Text>
-          </View>
-        </View>
+        )}
       </View>
 
       <View style={styles.footer}>

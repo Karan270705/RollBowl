@@ -26,9 +26,9 @@ import { Ionicons } from "@expo/vector-icons";
 import type { InventoryMode } from "@/src/engine/availabilityResolver";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/src/lib/supabase";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert, Modal } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert, Modal, ActivityIndicator, BackHandler } from "react-native";
 import { UpiPaymentPanel } from "@/src/components/payments/UpiPaymentPanel";
 import { PaymentScreenshotPicker, SelectedImage } from "@/src/components/payments/PaymentScreenshotPicker";
 import { usePaymentSettings, useSubmitOrderProof } from "@/src/hooks/payments/usePayments";
@@ -36,6 +36,9 @@ import { uploadPaymentScreenshot, parsePaymentBackendError } from "@/src/service
 import { resolveOperationalFacts } from "@/src/engine/operationalEngine";
 import { useCustomerStall } from "@/src/contexts/CustomerStallContext";
 import { Stall, CartItem } from "@/src/types/models";
+import { useRazorpayPayment } from "@/src/hooks/useRazorpayPayment";
+import RazorpayWebView from "@/src/components/RazorpayWebView";
+import { PAYMENT_CONFIG } from "@/src/config/payment";
 
 // ─── getCompatibleStalls Helper ─────────────────────────────────────────────
 // For each available stall, checks whether ALL cart meal IDs appear in its
@@ -135,9 +138,16 @@ export default function CheckoutScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, cartPickupDate, cartStallId, clearCart, updateQuantity, removeItem } = useCartStore();
-  const [payment, setPayment] = useState<PaymentMethod>(PaymentMethod.UPI);
+  const [payment, setPayment] = useState<PaymentMethod>(PAYMENT_CONFIG.razorpay.enabled ? PaymentMethod.RAZORPAY : PaymentMethod.UPI);
   const user = useUser();
-  const [pickupSlot, setPickupSlot] = useState<string>("12:00 PM - 12:30 PM");
+  const { 
+    initiatePayment, 
+    handlePaymentSuccess, 
+    handlePaymentFailure, 
+    checkoutData, 
+    showWebView 
+  } = useRazorpayPayment();
+  const [pickupSlot, setPickupSlot] = useState<string>("12:00 - 12:30");
   
   // Staged Checkout state
   const [checkoutState, setCheckoutState] = useState<CheckoutState>('REVIEW');
@@ -153,6 +163,32 @@ export default function CheckoutScreen() {
   const cartItemCountRef = useRef(items.reduce((sum, i) => sum + i.quantity, 0));
   const createdOrderIdRef = useRef<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
+
+  const navigation = useNavigation();
+  const [isInitiatingPayment, setIsInitiatingPayment] = useState(false);
+
+  // Prevent navigation during payment
+  useEffect(() => {
+    if (isInitiatingPayment || showWebView) {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        Alert.alert(
+          'Payment in Progress',
+          'Please complete or cancel the payment before going back.',
+          [{ text: 'OK' }]
+        );
+        return true;
+      });
+      return () => backHandler.remove();
+    }
+  }, [isInitiatingPayment, showWebView]);
+
+  useEffect(() => {
+    if (isInitiatingPayment || showWebView) {
+      navigation.setOptions({ gestureEnabled: false });
+    } else {
+      navigation.setOptions({ gestureEnabled: true });
+    }
+  }, [isInitiatingPayment, showWebView, navigation]);
 
   useEffect(() => {
     checkoutStateRef.current = checkoutState;
@@ -532,11 +568,30 @@ export default function CheckoutScreen() {
       setBackendTotal(newOrder.total);
       hasSubmittedRef.current = true;
 
+      // Issue 4: Clear cart immediately after order is successfully placed in backend
+      clearCart();
+
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.list(user.id) });
       await queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.active(user.id) });
 
       // 11. handle payment-specific next steps
-      if (resolvedPaymentMethod === PaymentMethod.UPI && !isFullyCoveredBySubscription) {
+      if (resolvedPaymentMethod === PaymentMethod.RAZORPAY && !isFullyCoveredBySubscription) {
+        setCheckoutState('ORDER_CREATED');
+        setIsInitiatingPayment(true);
+        await initiatePayment({
+          type: 'order',
+          entityId: newOrder.id,
+          stallId: effectiveStallId,
+          amount: newOrder.total,
+          onSuccess: () => {}, // Handled by RazorpayWebView
+          onError: (errorMsg) => {
+            Alert.alert('Payment Failed', errorMsg);
+            setCheckoutState('COMPLETED');
+            router.replace({ pathname: "/(tabs)/(orders)/[id]", params: { id: newOrder.id } } as any);
+          }
+        });
+        setIsInitiatingPayment(false);
+      } else if (resolvedPaymentMethod === PaymentMethod.UPI && !isFullyCoveredBySubscription) {
         setCheckoutState('ORDER_CREATED');
 
         if (selectedImage) {
@@ -555,7 +610,6 @@ export default function CheckoutScreen() {
               size: selectedImage.size,
             });
 
-            clearCart();
             setCheckoutState('COMPLETED');
             router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
           } catch (uploadErr) {
@@ -567,7 +621,6 @@ export default function CheckoutScreen() {
           setCheckoutState('AWAITING_PROOF');
         }
       } else {
-        clearCart();
         setCheckoutState('COMPLETED');
         router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: newOrder.id } } as any);
       }
@@ -771,7 +824,8 @@ export default function CheckoutScreen() {
           </View>
         ) : (
           <>
-            {isRecovering && (
+            {/* UPI-only: screenshot action required banner */}
+            {isRecovering && payment === PaymentMethod.UPI && (
               <View style={[styles.card, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight }]}>
                 <Text style={[styles.cardTitle, { color: Colors.warning }]}>Action Required</Text>
                 <Text style={{ fontSize: Typography.size.sm, color: Colors.warning }}>
@@ -779,6 +833,7 @@ export default function CheckoutScreen() {
                 </Text>
               </View>
             )}
+
 
             {!isRecovering && (
               <>
@@ -830,10 +885,10 @@ export default function CheckoutScreen() {
                       const menuInfo = opFacts?.activeMenu as any;
                       if (!menuInfo || !menuInfo.delivery_start_at || !menuInfo.delivery_end_at) {
                         return [
-                          { label: "12:00–12:30", value: "12:00 PM - 12:30 PM" },
-                          { label: "12:30–1:00", value: "12:30 PM - 01:00 PM" },
-                          { label: "1:00–1:30", value: "01:00 PM - 01:30 PM" },
-                          { label: "1:30–2:00", value: "01:30 PM - 02:00 PM" },
+                          { label: "12:00–12:30", value: "12:00 - 12:30" },
+                          { label: "12:30–1:00", value: "12:30 - 13:00" },
+                          { label: "1:00–1:30", value: "13:00 - 13:30" },
+                          { label: "1:30–2:00", value: "13:30 - 14:00" },
                         ];
                       }
                       
@@ -842,13 +897,20 @@ export default function CheckoutScreen() {
                       const endMs = new Date(menuInfo.delivery_end_at).getTime();
                       
                       const formatTimeOnly = (ms: number) => {
-                        return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                        return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/[\u202F\u00A0]/g, ' ');
+                      };
+                      
+                      const format24Hour = (ms: number) => {
+                        const d = new Date(ms);
+                        const hh = d.getHours().toString().padStart(2, '0');
+                        const mm = d.getMinutes().toString().padStart(2, '0');
+                        return `${hh}:${mm}`;
                       };
                       
                       while (currentMs < endMs) {
                         const nextMs = Math.min(currentMs + 30 * 60000, endMs);
                         const label = `${formatTimeOnly(currentMs).replace(' AM', '').replace(' PM', '')}–${formatTimeOnly(nextMs).replace(' AM', '').replace(' PM', '')}`;
-                        const value = `${formatTimeOnly(currentMs)} - ${formatTimeOnly(nextMs)}`;
+                        const value = `${format24Hour(currentMs)} - ${format24Hour(nextMs)}`;
                         slots.push({ label, value });
                         currentMs = nextMs;
                       }
@@ -925,7 +987,8 @@ export default function CheckoutScreen() {
               <View style={[styles.card, isLocked && { opacity: 0.6 }]}>
                 <Text style={styles.cardTitle}>Payment Method</Text>
                 {[
-                  { key: PaymentMethod.UPI, label: "UPI", icon: "phone-portrait-outline" as const },
+                  ...(PAYMENT_CONFIG.razorpay.enabled ? [{ key: PaymentMethod.RAZORPAY, label: "Online Payment (Razorpay)", icon: "card-outline" as const }] : []),
+                  ...(PAYMENT_CONFIG.razorpay.enabled ? [] : [{ key: PaymentMethod.UPI, label: "UPI", icon: "phone-portrait-outline" as const }]),
                   { key: PaymentMethod.CASH, label: "Cash on Pickup", icon: "cash-outline" as const },
                 ].map((p) => {
                   const isUpiDisabled = p.key === PaymentMethod.UPI && (!paymentSettings || !paymentSettings.isActive);
@@ -1062,6 +1125,53 @@ export default function CheckoutScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Loading overlay while initiating Razorpay */}
+      {isInitiatingPayment && !showWebView && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Initiating payment...</Text>
+            <Text style={styles.loadingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Razorpay WebView */}
+      {showWebView && checkoutData && (
+        <RazorpayWebView
+          visible={showWebView}
+          razorpayOrderId={checkoutData.razorpay_order_id}
+          amount={checkoutData.amount}
+          currency={checkoutData.currency}
+          keyId={checkoutData.key_id}
+          onSuccess={(paymentId, orderId, signature) => {
+            handlePaymentSuccess(
+              orderId,
+              paymentId,
+              signature,
+              () => {
+                router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: createdOrderIdRef.current } } as any);
+              },
+              (error) => {
+                Alert.alert('Verification Failed', error);
+              }
+            );
+          }}
+          onFailure={(reason) => {
+            handlePaymentFailure(
+              (error) => Alert.alert('Payment Failed', error),
+              reason
+            );
+          }}
+          onCancel={() => {
+            handlePaymentFailure(
+              (error) => Alert.alert('Payment Cancelled', error),
+              'User cancelled payment'
+            );
+          }}
+        />
+      )}
     </ScreenWrapper>
   );
 }
@@ -1293,5 +1403,39 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingCard: {
+    backgroundColor: '#fff',
+    borderRadius: Radii.md,
+    padding: Spacing['3xl'],
+    alignItems: 'center',
+    minWidth: 200,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  loadingText: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+    marginTop: Spacing.md,
+  },
+  loadingSubtext: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginTop: 4,
   },
 });

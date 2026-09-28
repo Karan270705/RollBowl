@@ -16,6 +16,8 @@ import { CustomerPaymentProofModal } from '@/src/components/payments/CustomerPay
 import { usePaymentSettings, useSubmitOrderProof } from '@/src/hooks/payments/usePayments';
 import { uploadPaymentScreenshot, parsePaymentBackendError } from '@/src/services/payments';
 import { useUser } from '@/src/store';
+import { useRazorpayPayment } from '@/src/hooks/useRazorpayPayment';
+import RazorpayWebView from '@/src/components/RazorpayWebView';
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,6 +27,13 @@ export default function OrderDetailsScreen() {
   const { data: order, isLoading } = useOrder(id);
   const { data: paymentSettings } = usePaymentSettings(order?.stallId);
   const submitProofMutation = useSubmitOrderProof();
+  const { 
+    initiatePayment, 
+    handlePaymentSuccess, 
+    handlePaymentFailure, 
+    checkoutData, 
+    showWebView 
+  } = useRazorpayPayment();
 
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -99,6 +108,10 @@ export default function OrderDetailsScreen() {
     order.paymentMethod === PaymentMethod.UPI && 
     (order.paymentVerificationStatus === PaymentVerificationStatus.AWAITING_PROOF || 
      order.paymentVerificationStatus === PaymentVerificationStatus.REJECTED);
+
+  const needsRazorpayRetry = 
+    order.paymentMethod === PaymentMethod.RAZORPAY &&
+    order.paymentStatus === PaymentStatus.PENDING;
 
   return (
     <ScreenWrapper>
@@ -266,6 +279,45 @@ export default function OrderDetailsScreen() {
             />
           </Section>
         )}
+
+        {/* Razorpay Retry Section */}
+        {needsRazorpayRetry && (
+          <Section title="Complete Payment">
+            <View style={{ backgroundColor: Colors.surfaceElevated, padding: Spacing.xl, borderRadius: Radii.md, alignItems: 'center' }}>
+              <Ionicons name="card" size={48} color={Colors.primary} />
+              <Text style={{ marginTop: Spacing.sm, fontSize: Typography.size.md, fontFamily: Typography.family.medium, color: Colors.textPrimary, textAlign: 'center' }}>
+                Your online payment is pending.
+              </Text>
+            </View>
+            <Button
+              title={`Pay ${formatCurrency(order.total)}`}
+              onPress={async () => {
+                try {
+                  setIsUploading(true);
+                  await initiatePayment({
+                    type: 'order',
+                    entityId: order.id,
+                    stallId: order.stallId,
+                    amount: order.total,
+                    onSuccess: () => {
+                      alert('Payment completed successfully!');
+                      router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: order.id } } as any);
+                    },
+                    onError: (err) => {
+                      alert(err);
+                    }
+                  });
+                } finally {
+                  setIsUploading(false);
+                }
+              }}
+              fullWidth
+              size="lg"
+              loading={isUploading}
+              style={{ marginTop: Spacing.lg }}
+            />
+          </Section>
+        )}
       </ScrollView>
 
       <CustomerPaymentProofModal
@@ -273,6 +325,43 @@ export default function OrderDetailsScreen() {
         onClose={() => setIsProofModalVisible(false)}
         orderId={order.id}
       />
+
+      {/* Razorpay WebView */}
+      {showWebView && checkoutData && (
+        <RazorpayWebView
+          visible={showWebView}
+          razorpayOrderId={checkoutData.razorpay_order_id}
+          amount={checkoutData.amount}
+          currency={checkoutData.currency}
+          keyId={checkoutData.key_id}
+          onSuccess={(paymentId, paymentOrderId, signature) => {
+            handlePaymentSuccess(
+              paymentOrderId,
+              paymentId,
+              signature,
+              () => {
+                alert('Payment completed successfully!');
+                router.replace({ pathname: "/(tabs)/(orders)/confirmation", params: { orderId: order.id } } as any);
+              },
+              (error) => {
+                alert(error);
+              }
+            );
+          }}
+          onFailure={(reason) => {
+            handlePaymentFailure(
+              (error) => alert(error),
+              reason
+            );
+          }}
+          onCancel={() => {
+            handlePaymentFailure(
+              (error) => alert(error),
+              'User cancelled payment'
+            );
+          }}
+        />
+      )}
     </ScreenWrapper>
   );
 }

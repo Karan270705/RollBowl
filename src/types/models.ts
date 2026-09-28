@@ -283,6 +283,8 @@ export interface SubscriptionPurchaseRequest {
   rejectedAt?: string;
   rejectionReason?: string;
   createdSubscriptionId?: string;
+  paymentGateway?: string;
+  payment_gateway?: string;
 }
 
 // ─── Extra Meal Reservation ─────────────────────────────────

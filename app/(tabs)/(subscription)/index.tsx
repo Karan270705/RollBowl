@@ -76,7 +76,11 @@ export default function SubscriptionScreen() {
     if (request.createdSubscriptionId) {
       return false;
     }
-    // 3. Hide rejected when an active subscription now exists for that approved request
+    // 3. Hide Razorpay requests (they're processed immediately)
+    if (request.paymentGateway === 'razorpay' || request.payment_gateway === 'razorpay') {
+      return false;
+    }
+    // 4. Hide rejected when an active subscription now exists for that approved request
     if (
       request.status === SubscriptionRequestStatus.REJECTED &&
       subscription &&
@@ -84,7 +88,7 @@ export default function SubscriptionScreen() {
     ) {
       return false;
     }
-    // 4. Show unresolved requests (awaiting_proof, verification_pending) or rejected when still unresolved
+    // 5. Show unresolved UPI requests (awaiting_proof, verification_pending) or rejected when still unresolved
     return (
       request.status === SubscriptionRequestStatus.AWAITING_PROOF ||
       request.status === SubscriptionRequestStatus.VERIFICATION_PENDING ||
@@ -168,7 +172,7 @@ export default function SubscriptionScreen() {
                       <Text style={styles.requestPlanName}>{plan?.name || 'Subscription Plan'}</Text>
                       <Text style={styles.requestDate}>{formatRelativeTime(req.requestedAt)}</Text>
                       <View style={{ marginTop: Spacing.sm }}>
-                        <PaymentStatusBadge status={req.status} />
+                        <PaymentStatusBadge status={req.status} paymentGateway={req.paymentGateway || req.payment_gateway} />
                       </View>
                     </View>
                     <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -177,8 +181,9 @@ export default function SubscriptionScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {(req.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
-                    req.status === SubscriptionRequestStatus.REJECTED) && (
+                  {((req.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
+                    req.status === SubscriptionRequestStatus.REJECTED) && 
+                    (req.paymentGateway !== 'razorpay' && req.payment_gateway !== 'razorpay')) && (
                     <TouchableOpacity 
                       style={styles.viewProofRequestBtn} 
                       onPress={() => {

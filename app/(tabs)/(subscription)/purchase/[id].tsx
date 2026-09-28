@@ -7,11 +7,15 @@ import { UpiPaymentPanel } from '@/src/components/payments/UpiPaymentPanel';
 import { PaymentScreenshotPicker, SelectedImage } from '@/src/components/payments/PaymentScreenshotPicker';
 import { uploadPaymentScreenshot } from '@/src/services/payments';
 import { useUser } from '@/src/store';
+import { useRazorpayPayment } from '@/src/hooks/useRazorpayPayment';
+import RazorpayWebView from '@/src/components/RazorpayWebView';
+import { PAYMENT_CONFIG } from '@/src/config/payment';
 import { formatCurrency } from '@/src/utils/formatters';
+import { supabase } from '@/src/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState, useRef } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import React, { useState, useRef, useEffect } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, Alert, BackHandler } from 'react-native';
 
 interface AuthoritativeFinancials {
   requestId: string;
@@ -44,6 +48,13 @@ export default function SubscriptionPurchaseScreen() {
 
   const createReqMutation = useCreateSubscriptionRequest();
   const submitProofMutation = useSubmitSubscriptionProof();
+  const { 
+    initiatePayment, 
+    handlePaymentSuccess, 
+    handlePaymentFailure, 
+    checkoutData, 
+    showWebView 
+  } = useRazorpayPayment();
 
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
   const [authoritativeData, setAuthoritativeData] = useState<AuthoritativeFinancials | null>(
@@ -51,8 +62,45 @@ export default function SubscriptionPurchaseScreen() {
   );
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isInitiatingPayment, setIsInitiatingPayment] = useState(false);
+  const navigation = useNavigation();
 
   const submittingRef = useRef(false);
+
+  // Delete subscription request helper
+  const deleteSubscriptionRequest = async (requestId: string) => {
+    try {
+      await supabase
+        .from('subscription_purchase_requests')
+        .delete()
+        .eq('id', requestId);
+    } catch (error) {
+      console.error('Failed to delete subscription request:', error);
+    }
+  };
+
+  // Prevent navigation during payment
+  useEffect(() => {
+    if (isInitiatingPayment || showWebView) {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        Alert.alert(
+          'Payment in Progress',
+          'Please complete or cancel the payment before going back.',
+          [{ text: 'OK' }]
+        );
+        return true;
+      });
+      return () => backHandler.remove();
+    }
+  }, [isInitiatingPayment, showWebView]);
+
+  useEffect(() => {
+    if (isInitiatingPayment || showWebView) {
+      navigation.setOptions({ gestureEnabled: false });
+    } else {
+      navigation.setOptions({ gestureEnabled: true });
+    }
+  }, [isInitiatingPayment, showWebView, navigation]);
 
   // Preview Calculations
   const previewBaseAmount = plan?.price ?? 0;
@@ -69,7 +117,7 @@ export default function SubscriptionPurchaseScreen() {
 
   const handleSubmitSubscription = async () => {
     if (submittingRef.current) return;
-    if (!selectedImage) {
+    if (!PAYMENT_CONFIG.razorpay.enabled && !selectedImage) {
       setErrorMessage('Please select your UPI payment screenshot first.');
       return;
     }
@@ -106,27 +154,45 @@ export default function SubscriptionPurchaseScreen() {
         });
       }
 
-      // Step 2: Upload screenshot (preserve requestId if upload/linking fails)
-      const uploadedPath = await uploadPaymentScreenshot(
-        'subscriptions',
-        user.id,
-        selectedImage.uri,
-        selectedImage.mimeType
-      );
+      if (PAYMENT_CONFIG.razorpay.enabled) {
+        setIsInitiatingPayment(true);
+        await initiatePayment({
+          type: 'subscription',
+          entityId: currentRequestId,
+          stallId: stallId,
+          amount: authoritativeExpectedAmount,
+          onSuccess: () => {}, // Handled by RazorpayWebView
+          onError: (err) => {
+            setErrorMessage(err);
+          }
+        });
+        setIsInitiatingPayment(false);
+      } else {
+        // Step 2: Upload screenshot (preserve requestId if upload/linking fails)
+        const uploadedPath = await uploadPaymentScreenshot(
+          'subscriptions',
+          user.id,
+          selectedImage!.uri,
+          selectedImage!.mimeType
+        );
 
-      // Step 3: Call submit_subscription_payment_proof
-      await submitProofMutation.mutateAsync({
-        requestId: currentRequestId,
-        screenshotPath: uploadedPath,
-        mimeType: selectedImage.mimeType,
-        size: selectedImage.size,
-      });
+        // Step 3: Call submit_subscription_payment_proof
+        await submitProofMutation.mutateAsync({
+          requestId: currentRequestId,
+          screenshotPath: uploadedPath,
+          mimeType: selectedImage!.mimeType,
+          size: selectedImage!.size,
+        });
 
-      // Step 4: Navigate to success
-      router.replace({
-        pathname: '/(tabs)/(subscription)/success',
-        params: { isReplacement: isRejected ? 'true' : 'false' },
-      } as any);
+        // Step 4: Navigate to success
+        router.replace({
+          pathname: '/(tabs)/(subscription)/success',
+          params: {
+            isReplacement: isRejected ? 'true' : 'false',
+            paymentGateway: 'upi' // For legacy UPI flow
+          },
+        } as any);
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred while submitting your subscription request.');
     } finally {
@@ -222,8 +288,13 @@ export default function SubscriptionPurchaseScreen() {
           </View>
         </Section>
 
-        <Section title="UPI Payment Proof">
-          {paymentSettings ? (
+        <Section title={PAYMENT_CONFIG.razorpay.enabled ? "Online Payment" : "UPI Payment Proof"}>
+          {PAYMENT_CONFIG.razorpay.enabled ? (
+            <View style={{ padding: Spacing.xl, backgroundColor: Colors.surfaceElevated, borderRadius: Radii.md, alignItems: 'center' }}>
+              <Ionicons name="card" size={48} color={Colors.primary} />
+              <Text style={{ marginTop: Spacing.sm, fontSize: Typography.size.md, fontFamily: Typography.family.medium, color: Colors.textPrimary }}>Pay securely with Razorpay</Text>
+            </View>
+          ) : paymentSettings ? (
             <UpiPaymentPanel
               amount={totalAmount}
               recipientName={paymentSettings.recipientName}
@@ -248,16 +319,97 @@ export default function SubscriptionPurchaseScreen() {
         <Text style={styles.termsText}>
           {isRejected
             ? 'Upload a corrected payment screenshot to continue.'
-            : `By submitting, you confirm payment of ${formatCurrency(totalAmount)} via UPI. Subscription begins after Kitchen verification.`}
+            : `By submitting, you confirm payment of ${formatCurrency(totalAmount)}. Subscription begins after verification.`}
         </Text>
         <Button
-          title={isRejected ? 'Upload New Screenshot' : `Submit Subscription Request • ${formatCurrency(totalAmount)}`}
+          title={isRejected ? (PAYMENT_CONFIG.razorpay.enabled ? 'Pay Now' : 'Upload New Screenshot') : (PAYMENT_CONFIG.razorpay.enabled ? `Proceed to Payment • ${formatCurrency(totalAmount)}` : `Submit Subscription Request • ${formatCurrency(totalAmount)}`)}
           onPress={handleSubmitSubscription}
-          loading={createReqMutation.isPending || submitProofMutation.isPending || isUploading}
-          disabled={!selectedImage || isUploading || createReqMutation.isPending || submitProofMutation.isPending}
+          loading={createReqMutation.isPending || submitProofMutation.isPending || isUploading || isInitiatingPayment}
+          disabled={(!PAYMENT_CONFIG.razorpay.enabled && !selectedImage) || isUploading || createReqMutation.isPending || submitProofMutation.isPending || isInitiatingPayment}
           fullWidth
         />
       </View>
+
+      {/* Loading overlay while initiating Razorpay */}
+      {isInitiatingPayment && !showWebView && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Initiating payment...</Text>
+            <Text style={styles.loadingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Razorpay WebView */}
+      {showWebView && checkoutData && (
+        <RazorpayWebView
+          visible={showWebView}
+          razorpayOrderId={checkoutData.razorpay_order_id}
+          amount={checkoutData.amount}
+          currency={checkoutData.currency}
+          keyId={checkoutData.key_id}
+          onSuccess={(paymentId, paymentOrderId, signature) => {
+            handlePaymentSuccess(
+              paymentOrderId,
+              paymentId,
+              signature,
+              () => {
+                // For Razorpay, subscription is immediately active
+                // Navigate to main subscription screen which will show active subscription
+                router.replace('/(tabs)/(subscription)' as any);
+              },
+              (error) => {
+                setErrorMessage(error);
+              }
+            );
+          }}
+          onFailure={(reason) => {
+            handlePaymentFailure(
+              async (error) => {
+                // Delete the failed request
+                if (authoritativeData?.requestId) {
+                  await deleteSubscriptionRequest(authoritativeData.requestId);
+                }
+                setErrorMessage(error);
+                Alert.alert(
+                  'Payment Failed',
+                  'Your payment could not be completed. Please try again.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => router.replace('/(tabs)/(subscription)' as any)
+                    }
+                  ]
+                );
+              },
+              reason
+            );
+          }}
+          onCancel={() => {
+            handlePaymentFailure(
+              async (error) => {
+                // Delete the cancelled request
+                if (authoritativeData?.requestId) {
+                  await deleteSubscriptionRequest(authoritativeData.requestId);
+                }
+                setErrorMessage(error);
+                Alert.alert(
+                  'Payment Cancelled',
+                  'You cancelled the payment.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => router.replace('/(tabs)/(subscription)' as any)
+                    }
+                  ]
+                );
+              },
+              'User cancelled payment'
+            );
+          }}
+        />
+      )}
     </ScreenWrapper>
   );
 }
@@ -435,5 +587,39 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     textAlign: 'center',
     marginBottom: Spacing.md,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingCard: {
+    backgroundColor: '#fff',
+    borderRadius: Radii.md,
+    padding: Spacing['3xl'],
+    alignItems: 'center',
+    minWidth: 200,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  loadingText: {
+    fontSize: Typography.size.base,
+    fontFamily: Typography.family.semiBold,
+    color: Colors.textPrimary,
+    marginTop: Spacing.md,
+  },
+  loadingSubtext: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginTop: 4,
   },
 });
