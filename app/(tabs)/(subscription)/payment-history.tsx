@@ -24,7 +24,7 @@ export default function PaymentHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Payment & Request History</Text>
+        <Text style={styles.title}>Subscription History</Text>
       </View>
 
       {isLoading ? (
@@ -32,41 +32,48 @@ export default function PaymentHistoryScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           {requests.length === 0 ? (
-            <EmptyState icon="receipt-outline" title="No History Found" subtitle="Your past subscription purchase requests and payment attempts will appear here." />
+            <EmptyState icon="receipt-outline" title="No History Found" subtitle="Your past subscription purchases will appear here." />
           ) : (
-            requests.map((req) => (
-              <View key={req.id} style={styles.paymentCard}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="card-outline" size={20} color={Colors.primary} />
-                </View>
-                <View style={styles.detailsContainer}>
-                  <Text style={styles.description}>Subscription Request</Text>
-                  <Text style={styles.methodText}>{formatRelativeTime(req.requestedAt)}</Text>
-                  {req.rejectionReason ? (
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.error, marginTop: 4 }}>
-                      Reason: {req.rejectionReason}
+            requests.map((req) => {
+              const isRazorpay = req.paymentGateway === 'razorpay' || req.payment_gateway === 'razorpay';
+              return (
+                <View key={req.id} style={styles.paymentCard}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name={isRazorpay ? "card-outline" : "qr-code-outline"} size={20} color={Colors.primary} />
+                  </View>
+                  <View style={styles.detailsContainer}>
+                    <Text style={styles.description}>
+                      {isRazorpay ? 'Online Payment (Razorpay)' : 'UPI Payment'}
                     </Text>
-                  ) : null}
-                  <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
-                    <PaymentStatusBadge status={req.status} />
+                    <Text style={styles.methodText}>{formatRelativeTime(req.requestedAt)}</Text>
+                    {req.rejectionReason ? (
+                      <Text style={{ fontSize: Typography.size.xs, color: Colors.error, marginTop: 4 }}>
+                        Reason: {req.rejectionReason}
+                      </Text>
+                    ) : null}
+                    <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+                      <PaymentStatusBadge status={req.status} paymentGateway={req.paymentGateway || req.payment_gateway} />
+                    </View>
+                  </View>
+                  <View style={styles.amountContainer}>
+                    <Text style={styles.amount}>{formatCurrency(req.expectedAmount)}</Text>
+                    {!isRazorpay && req.currentPaymentProofId && (
+                      <TouchableOpacity
+                        style={{ marginTop: Spacing.xs }}
+                        onPress={() => {
+                          setSelectedRequestId(req.id);
+                          setIsProofModalVisible(true);
+                        }}
+                      >
+                        <Text style={{ fontSize: Typography.size.xs, color: Colors.primary, fontFamily: Typography.family.medium }}>
+                          View Proof
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
-                <View style={styles.amountContainer}>
-                  <Text style={styles.amount}>{formatCurrency(req.expectedAmount)}</Text>
-                  <TouchableOpacity
-                    style={{ marginTop: Spacing.xs }}
-                    onPress={() => {
-                      setSelectedRequestId(req.id);
-                      setIsProofModalVisible(true);
-                    }}
-                  >
-                    <Text style={{ fontSize: Typography.size.xs, color: Colors.primary, fontFamily: Typography.family.medium }}>
-                      View Proof
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       )}

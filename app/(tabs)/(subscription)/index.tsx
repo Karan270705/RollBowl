@@ -125,7 +125,7 @@ export default function SubscriptionScreen() {
             id: req.planId,
             requestId: req.id,
             rejected: 'true',
-            rejectionReason: req.rejectionReason || 'The kitchen could not verify your payment.'
+            rejectionReason: req.rejectionReason || 'The payment could not be processed.'
           }
         } as any);
         break;
@@ -156,10 +156,10 @@ export default function SubscriptionScreen() {
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Spacing['3xl'] }}>
         
-        {/* Pending Requests */}
+        {/* Pending Payments */}
         {pendingRequests.length > 0 && (
           <View style={{ marginBottom: Spacing.xl }}>
-            <Text style={styles.sectionTitle}>Pending Requests</Text>
+            <Text style={styles.sectionTitle}>Pending Payments</Text>
             {pendingRequests.map(req => {
               const plan = plans?.find(p => p.id === req.planId);
               return (
@@ -181,18 +181,18 @@ export default function SubscriptionScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {((req.status === SubscriptionRequestStatus.VERIFICATION_PENDING || 
-                    req.status === SubscriptionRequestStatus.REJECTED) && 
+                  {((req.status === SubscriptionRequestStatus.VERIFICATION_PENDING ||
+                    req.status === SubscriptionRequestStatus.REJECTED) &&
                     (req.paymentGateway !== 'razorpay' && req.payment_gateway !== 'razorpay')) && (
-                    <TouchableOpacity 
-                      style={styles.viewProofRequestBtn} 
+                    <TouchableOpacity
+                      style={styles.viewProofRequestBtn}
                       onPress={() => {
                         setSelectedRequestId(req.id);
                         setIsProofModalVisible(true);
                       }}
                     >
                       <Ionicons name="image-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
-                      <Text style={styles.viewProofRequestBtnText}>View Uploaded Screenshot</Text>
+                      <Text style={styles.viewProofRequestBtnText}>View Payment Proof</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -337,7 +337,7 @@ export default function SubscriptionScreen() {
             onPress={() => router.push('/(tabs)/(subscription)/payment-history' as any)}
           >
             <Ionicons name="time-outline" size={16} color={Colors.primary} style={{ marginRight: Spacing.xs }} />
-            <Text style={styles.historyButtonText}>View Request & Payment History</Text>
+            <Text style={styles.historyButtonText}>View Subscription History</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

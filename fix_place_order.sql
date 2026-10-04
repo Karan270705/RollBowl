@@ -1,6 +1,4 @@
--- ============================================================
--- RollBowl Migration 036: Atomic Place Order RPC
--- ============================================================
+-- Quick fix: Apply the corrected payment_method type cast
 
 CREATE OR REPLACE FUNCTION place_order(p_payload JSONB)
 RETURNS JSONB
@@ -22,15 +20,15 @@ DECLARE
   v_payment_method TEXT;
   v_notes TEXT;
   v_subscription_updates JSONB;
-  
+
   v_batch_id UUID;
   v_item JSONB;
   v_meal_id UUID;
   v_requested_qty INTEGER;
-  
+
   v_inventory_item RECORD;
   v_state RECORD;
-  
+
   v_order_id UUID;
   v_order_number TEXT;
 BEGIN
@@ -63,22 +61,18 @@ BEGIN
 
   -- 3. If Batch Exists, Lock and Validate Inventory
   IF v_batch_id IS NOT NULL THEN
-    -- Lock inventory_batch_items in deterministic order (meal_id ascending)
-    -- We do this by iterating over the distinct meal_ids in the order sorted by UUID.
-    FOR v_item IN 
+    FOR v_item IN
       SELECT * FROM jsonb_array_elements(v_items) ORDER BY (value->>'mealId')::UUID ASC
     LOOP
       v_meal_id := (v_item->>'mealId')::UUID;
       v_requested_qty := (v_item->>'quantity')::INTEGER;
 
-      -- Check if the item exists in the batch and lock it
       SELECT * INTO v_inventory_item
       FROM inventory_batch_items
       WHERE inventory_batch_id = v_batch_id AND meal_id = v_meal_id
       FOR UPDATE;
 
       IF NOT FOUND THEN
-        -- Item not offered in today's active batch
         RETURN jsonb_build_object(
           'error', 'ITEM_NOT_IN_BATCH',
           'message', 'Not available for today''s pickup',
@@ -87,9 +81,6 @@ BEGIN
         );
       END IF;
 
-      -- Check availability by forcing recalculation using the live_inventory_status view
-      -- Because we hold the row lock on inventory_batch_items, concurrent transactions
-      -- doing the same will wait here.
       SELECT * INTO v_state
       FROM live_inventory_status
       WHERE inventory_batch_item_id = v_inventory_item.id;
@@ -125,7 +116,7 @@ BEGIN
       WHEN v_payment_method = 'razorpay' THEN 'pending'::payment_status
       ELSE 'paid'::payment_status
     END,
-    v_payment_method::payment_method,
+    v_payment_method::payment_method_type,
     CASE
       WHEN v_payment_method = 'subscription' THEN 'not_required'::payment_verification_status
       WHEN v_payment_method = 'cash' THEN 'not_required'::payment_verification_status
@@ -163,7 +154,7 @@ BEGIN
         consumed_meals = (v_subscription_updates->'updates'->>'consumedMeals')::INTEGER,
         remaining_meals = (v_subscription_updates->'updates'->>'remainingMeals')::INTEGER
     WHERE id = (v_subscription_updates->>'id')::UUID
-      AND user_id = v_user_id; -- Extra security check to ensure the user owns the sub
+      AND user_id = v_user_id;
   END IF;
 
   -- 7. Return Order Info

@@ -161,11 +161,17 @@ export async function placeOrder(
   paymentMethod: import('@/src/constants/enums').PaymentMethod,
   subscriptionId?: string,
   notes?: string,
-  inventoryBatchId?: string | null
+  inventoryBatchId?: string | null,
+  subscriptionUpdates?: any, // Add subscription updates parameter
+  customerName?: string,
+  stallName?: string,
+  subtotal?: number,
+  tax?: number,
+  total?: number
 ): Promise<Order> {
   // SERVER-SIDE OPERATIONAL VALIDATION
   const opFacts = await resolveOperationalFacts(stallId, pickupDate);
-  
+
   if (opFacts.status === 'HOLIDAY') {
     throw new Error('Cannot place an order on a Kitchen Holiday.');
   }
@@ -178,22 +184,58 @@ export async function placeOrder(
     throw new Error('Invalid order date. The client clock is out of sync with the kitchen operations.');
   }
 
+  // Calculate totals from items if not provided
+  const calculatedSubtotal = subtotal ?? items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const calculatedTax = tax ?? Math.round(calculatedSubtotal * 0.05 * 100) / 100;
+  const calculatedTotal = total ?? Math.round((calculatedSubtotal + calculatedTax) * 100) / 100;
+
+  // Fetch user and stall data if names not provided
+  let finalCustomerName = customerName;
+  let finalStallName = stallName;
+
+  if (!finalCustomerName) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', userId)
+      .single();
+    finalCustomerName = userData?.name || 'Customer';
+  }
+
+  if (!finalStallName) {
+    const { data: stallData } = await supabase
+      .from('stalls')
+      .select('name')
+      .eq('id', stallId)
+      .single();
+    finalStallName = stallData?.name || 'Stall';
+  }
+
   // Use the atomic place_order RPC
   const payload = {
     userId,
+    customerName: finalCustomerName,
     stallId,
+    stallName: finalStallName,
     items: items.map(item => ({
       mealId: item.meal.id,
+      mealName: item.meal.name,
       quantity: item.quantity,
-      isSubscriptionItem: !!item.subscriptionId,
-      useSubscription: !!item.subscriptionId
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      subscriptionId: item.subscriptionId || null,
+      creditsUsed: item.creditsUsed || 0
     })),
+    subtotal: calculatedSubtotal,
+    tax: calculatedTax,
+    total: calculatedTotal,
     pickupDate,
     expectedPickupSlot,
     paymentMethod,
     notes,
     subscriptionId,
     inventoryBatchId,
+    subscriptionUpdates, // Add subscription updates to payload
   };
 
   const { data: result, error: rpcError } = await supabase.rpc('place_order', {

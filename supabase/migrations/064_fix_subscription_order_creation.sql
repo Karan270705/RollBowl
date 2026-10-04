@@ -1,6 +1,10 @@
 -- ============================================================
--- RollBowl Migration 036: Atomic Place Order RPC
+-- RollBowl Migration 064: Fix Subscription Order Creation
 -- ============================================================
+-- Fixes:
+-- 1. Properly sets order_type to 'subscription' for subscription orders
+-- 2. Sets payment_status to 'paid' for subscription orders
+-- 3. Sets payment_verification_status correctly for each payment method
 
 CREATE OR REPLACE FUNCTION place_order(p_payload JSONB)
 RETURNS JSONB
@@ -22,15 +26,15 @@ DECLARE
   v_payment_method TEXT;
   v_notes TEXT;
   v_subscription_updates JSONB;
-  
+
   v_batch_id UUID;
   v_item JSONB;
   v_meal_id UUID;
   v_requested_qty INTEGER;
-  
+
   v_inventory_item RECORD;
   v_state RECORD;
-  
+
   v_order_id UUID;
   v_order_number TEXT;
 BEGIN
@@ -65,7 +69,7 @@ BEGIN
   IF v_batch_id IS NOT NULL THEN
     -- Lock inventory_batch_items in deterministic order (meal_id ascending)
     -- We do this by iterating over the distinct meal_ids in the order sorted by UUID.
-    FOR v_item IN 
+    FOR v_item IN
       SELECT * FROM jsonb_array_elements(v_items) ORDER BY (value->>'mealId')::UUID ASC
     LOOP
       v_meal_id := (v_item->>'mealId')::UUID;
@@ -125,7 +129,7 @@ BEGIN
       WHEN v_payment_method = 'razorpay' THEN 'pending'::payment_status
       ELSE 'paid'::payment_status
     END,
-    v_payment_method::payment_method,
+    v_payment_method::payment_method_type,
     CASE
       WHEN v_payment_method = 'subscription' THEN 'not_required'::payment_verification_status
       WHEN v_payment_method = 'cash' THEN 'not_required'::payment_verification_status

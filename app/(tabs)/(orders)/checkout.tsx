@@ -540,7 +540,11 @@ export default function CheckoutScreen() {
         resolvedPaymentMethod,
         appliedSubscriptionId,
         undefined,
-        activeBatchId
+        activeBatchId,
+        engineResult.subscriptionUpdates ? {
+          id: subscription!.id,
+          updates: engineResult.subscriptionUpdates
+        } : undefined
       );
 
       // Diagnostic log: [PLACE ORDER RPC SUCCESS]
@@ -824,12 +828,12 @@ export default function CheckoutScreen() {
           </View>
         ) : (
           <>
-            {/* UPI-only: screenshot action required banner */}
+            {/* UPI-only: payment proof action required banner */}
             {isRecovering && payment === PaymentMethod.UPI && (
               <View style={[styles.card, { borderColor: Colors.warning, borderWidth: 1, backgroundColor: Colors.warningLight }]}>
                 <Text style={[styles.cardTitle, { color: Colors.warning }]}>Action Required</Text>
                 <Text style={{ fontSize: Typography.size.sm, color: Colors.warning }}>
-                  Your order has been created, but the payment screenshot still needs to be submitted. Please upload the screenshot below to complete your order.
+                  Your order has been created, but the payment proof still needs to be submitted. Please upload the payment proof below to complete your order.
                 </Text>
               </View>
             )}
@@ -1048,7 +1052,7 @@ export default function CheckoutScreen() {
               </View>
             )}
 
-            {/* Stage 1: UPI Panel & Screenshot selection in REVIEW before Place Order */}
+            {/* Stage 1: UPI Panel & Payment Proof selection in REVIEW before Place Order */}
             {!isRecovering &&
               remainingPayableAmount > 0 &&
               payment === PaymentMethod.UPI &&

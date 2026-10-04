@@ -218,7 +218,7 @@ export default function SubscriptionPurchaseScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>{isRejected ? 'Payment proof rejected' : 'Review & Confirm'}</Text>
-          <Text style={styles.subtitle}>{isRejected ? 'The kitchen could not verify your payment.' : 'Complete your subscription via UPI'}</Text>
+          <Text style={styles.subtitle}>{isRejected ? 'The payment could not be processed.' : 'Complete your subscription via UPI'}</Text>
         </View>
 
         {isRejected ? (
@@ -319,7 +319,7 @@ export default function SubscriptionPurchaseScreen() {
         <Text style={styles.termsText}>
           {isRejected
             ? 'Upload a corrected payment screenshot to continue.'
-            : `By submitting, you confirm payment of ${formatCurrency(totalAmount)}. Subscription begins after verification.`}
+            : `By submitting, you confirm payment of ${formatCurrency(totalAmount)}. Subscription activates after payment confirmation.`}
         </Text>
         <Button
           title={isRejected ? (PAYMENT_CONFIG.razorpay.enabled ? 'Pay Now' : 'Upload New Screenshot') : (PAYMENT_CONFIG.razorpay.enabled ? `Proceed to Payment • ${formatCurrency(totalAmount)}` : `Submit Subscription Request • ${formatCurrency(totalAmount)}`)}

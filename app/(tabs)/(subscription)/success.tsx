@@ -26,8 +26,8 @@ export default function SubscriptionSuccessScreen() {
   const bodyText = isRazorpay
     ? 'Your payment was successful and your subscription is now active. You can start placing orders immediately!'
     : (isReplacement === 'true'
-      ? 'New payment proof submitted. Your request is waiting for kitchen verification.'
-      : 'Your screenshot has been received. Your subscription will be activated after the kitchen verifies and approves the payment.');
+      ? 'New payment proof submitted. Your request is being processed.'
+      : 'Your payment proof has been received. Your subscription will be activated after the payment is confirmed.');
 
   return (
     <ScreenWrapper>
@@ -47,27 +47,27 @@ export default function SubscriptionSuccessScreen() {
           <View style={styles.infoBox}>
             <View style={styles.infoRow}>
               <Ionicons name="shield-checkmark-outline" size={20} color={Colors.primary} />
-              <Text style={styles.infoText}>Status: Pending Verification</Text>
+              <Text style={styles.infoText}>Status: Pending Confirmation</Text>
             </View>
             <View style={styles.infoRow}>
               <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
-              <Text style={styles.infoText}>You will be notified once verified by Kitchen</Text>
+              <Text style={styles.infoText}>You will be notified once payment is confirmed</Text>
             </View>
           </View>
         )}
       </View>
 
       <View style={styles.footer}>
-        <Button 
-          title="View Request Status" 
-          onPress={() => router.replace('/(tabs)/(subscription)' as any)} 
-          fullWidth 
+        <Button
+          title={isRazorpay ? "View My Subscription" : "View Request Status"}
+          onPress={() => router.replace('/(tabs)/(subscription)' as any)}
+          fullWidth
         />
-        <Button 
-          title="Back to Subscriptions" 
+        <Button
+          title="Back to Home"
           variant="outline"
-          onPress={() => router.replace('/(tabs)/(subscription)' as any)} 
-          fullWidth 
+          onPress={() => router.replace('/(tabs)/(subscription)' as any)}
+          fullWidth
           style={{ marginTop: Spacing.md }}
         />
       </View>

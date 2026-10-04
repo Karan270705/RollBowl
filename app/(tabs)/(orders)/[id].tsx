@@ -250,7 +250,7 @@ export default function OrderDetailsScreen() {
                 <Ionicons name="alert-circle" size={24} color={Colors.error} style={{ marginRight: Spacing.sm }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rejectionTitle}>Payment Rejected</Text>
-                  <Text style={styles.rejectionText}>Your previous screenshot was rejected. Please upload a valid payment proof.</Text>
+                  <Text style={styles.rejectionText}>Your previous payment proof was rejected. Please upload a valid payment proof.</Text>
                 </View>
               </View>
             )}
